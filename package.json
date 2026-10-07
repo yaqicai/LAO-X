@@ -1,0 +1,12 @@
+{
+  "name": "lao-x-project-page",
+  "version": "1.0.0",
+  "private": true,
+  "description": "LAO-X research project page \u2014 dependency-free and GitHub Pages ready",
+  "scripts": {
+    "dev": "node scripts/serve.mjs",
+    "start": "node scripts/serve.mjs",
+    "check": "node --check app.js && node --check real-results.js && node --check hero-motion.js && node --check hero-single.js && node --check explorer-help.js && node scripts/check.mjs",
+    "build": "npm run check && node scripts/build.mjs"
+  }
+}

@@ -1,0 +1,8 @@
+dist/
+node_modules/
+.DS_Store
+*.log
+.env
+.env.*
+research/public-preview.json
+research/github-release.json

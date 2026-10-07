@@ -1,0 +1,14 @@
+{
+  "scans_verified": 60,
+  "outputs_verified": 1857,
+  "source_excluded_g1": 2162,
+  "selected_excluded_g1": 123,
+  "checks": [
+    "Source images and retained masks are byte-identical.",
+    "Display alpha equals the binary prediction at every pixel.",
+    "Independent NumPy bounds and IoU calculations match every packaged output.",
+    "Every point optimum excludes g=1 exactly when area(g=1) < area(g=0.9).",
+    "Generated copies of excluded masks are absent; the source export is unchanged.",
+    "The 60 selected scans match the recomputed top-ten ranking."
+  ]
+}
