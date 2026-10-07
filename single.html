@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#f5f8fc">
+  <meta name="description" content="LAO-X: Localize any object in X-ray security scans without human annotation. Explore category-agnostic localization, physics-guided synthesis, and six X-ray benchmarks.">
+  <meta property="og:title" content="LAO-X — Localize Any Object in X-Ray">
+  <meta property="og:description" content="Localize any object in X-ray security scans without human annotation.">
+  <meta property="og:image" content="assets/real/DvXray/4214/image.png">
+  <title>LAO-X — Single-view animation</title>
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="hero-single.css">
+  <link rel="stylesheet" href="real-results.css">
+  <link rel="stylesheet" href="explorer-help.css">
+  <script src="assets/real/manifest.js" defer></script>
+  <script src="app.js" defer></script>
+  <script src="real-results.js" defer></script>
+  <script src="explorer-help.js" defer></script>
+  <script src="hero-single.js" defer></script>
+</head>
+<body>
+  <svg class="mask-color-defs" width="0" height="0" aria-hidden="true" focusable="false"><defs><filter id="mask-highlight" color-interpolation-filters="sRGB"><feColorMatrix type="matrix" values="0 0 0 0 0.91  0 0 0 0 0.04  0 0 0 0 0.63  0 0 0 1 0"/></filter></defs></svg>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header">
+    <div class="nav-shell">
+      <a class="brand" href="#" aria-label="LAO-X home">LAO<span>-X</span><i></i></a>
+      <a class="team-brand" href="https://mhug.disi.unitn.it/" target="_blank" rel="noopener" aria-label="MHUG — Multimedia and Human Understanding Group" title="Multimedia and Human Understanding Group · University of Trento"><img src="assets/mhug.svg" width="32" height="27" alt=""><span>MHUG<small>University of Trento</small></span></a>
+      <div class="conference-brand" aria-label="NeurIPS 2026">
+        <img src="assets/neurips.svg" width="132" height="59" alt="Neural Information Processing Systems">
+        <span>2026</span>
+      </div>
+    </div>
+  </header>
+
+  <main id="main">
+    <section class="hero hero-single" aria-labelledby="hero-title">
+      <div class="hero-cinema">
+        <div class="hero-film" role="img" aria-label="LAO-X segmentation: a cursor selects an X-ray object and adjusts granularity through its original masks.">
+          <div class="hero-film-scene" aria-hidden="true">
+            <img class="hero-source-image" src="assets/real/DvXray/4214/image.png" width="800" height="600" alt="" fetchpriority="high">
+            <img class="hero-real-mask" alt="">
+            <svg class="hero-film-overlay" viewBox="0 0 800 600"><circle id="hero-click-ring" cx="0" cy="0" r="0"/><circle id="hero-prompt" cx="0" cy="0" r="0"/></svg>
+          </div>
+          <div class="hero-film-shade"></div>
+          <div class="hero-granularity" aria-hidden="true">
+            <div class="hero-granularity-heading"><span>Granularity</span><span class="hero-granularity-value">0.1</span></div>
+            <div class="hero-granularity-track"><span class="hero-granularity-fill"></span><span class="hero-granularity-knob"></span></div>
+            <div class="hero-granularity-labels"><span>0.1</span><span class="hero-granularity-max">1.0</span></div>
+          </div>
+          <div class="hero-film-cursor" aria-hidden="true"><svg viewBox="0 0 40 52"><path d="M4 3v37l10-10 10 18 8-5-11-17h15Z"/></svg></div>
+        </div>
+      <div class="hero-inner wrap">
+        <div class="hero-copy">
+          <h1 id="hero-title"><span class="hero-title-main">Localize <em>Any</em> Object in X-Ray Security Scans</span><span class="hero-title-subtitle">without Human Annotation</span></h1>
+          <div class="hero-actions">
+            <a class="button primary" href="#explore">Explore the demo <span>↗</span></a>
+            <div class="hero-resources" role="group" aria-label="Research resources">
+              <a class="button text-button" href="https://arxiv.org/pdf/2610.07326v1" target="_blank" rel="noopener" title="Paper on arXiv"><img src="assets/arxiv.svg" width="22" height="22" alt="" aria-hidden="true"> Read the paper</a>
+              <a class="resource-link" href="https://github.com/yaqicai/LAO-X" target="_blank" rel="noopener" aria-label="Code on GitHub" title="Code on GitHub"><img src="assets/github.svg" width="23" height="23" alt=""></a>
+              <a class="resource-link" href="https://huggingface.co/YAQICAI/LAO-X" target="_blank" rel="noopener" aria-label="Model on Hugging Face" title="Model on Hugging Face"><img src="assets/huggingface.svg" width="27" height="27" alt=""></a>
+            </div>
+          </div>
+        </div>
+      </div>
+      </div>
+      <div class="key-points wrap" aria-label="LAO-X highlights">
+        <a class="key-point key-performance" id="performance-highlight" href="#results" title="Unweighted mean box mAP (AP50:95) over six test-only benchmarks: LAO-X 24.16 vs. SAM2 11.38, a gain of 12.79 points.">
+          <div class="key-visual key-gain"><strong id="mean-map-gain">+12.8</strong><span>mAP points</span></div>
+          <div class="key-copy"><h3>More accurate than SAM2</h3><p>Average box mAP across 6 benchmarks.</p></div><span class="key-arrow" aria-hidden="true">↗</span>
+        </a>
+        <a class="key-point" href="#explore">
+          <div class="key-visual"><svg viewBox="0 0 84 48" aria-hidden="true"><rect x="3" y="4" width="41" height="40" rx="7" fill="#2476ef0d" stroke="#95b9ea" stroke-width="1.5"/><rect x="11" y="12" width="25" height="24" rx="5" fill="#e80aa11b" stroke="#d234a1" stroke-width="1.5"/><circle cx="23.5" cy="24" r="3" fill="#d234a1"/><path d="M53 24h25m-7-7 7 7-7 7" fill="none" stroke="#2476ef" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+          <div class="key-copy"><h3>From parts to whole objects</h3><p>One point. Adjustable granularity.</p></div><span class="key-arrow" aria-hidden="true">↗</span>
+        </a>
+        <a class="key-point" href="#capabilities-title">
+          <div class="key-visual"><svg viewBox="0 0 84 48" aria-hidden="true"><path d="M15 7c9-7 21 1 19 9s-12 4-14 13S4 43 3 32 11 22 8 16 9 9 15 7Z" fill="#2476ef0d" stroke="#2476ef" stroke-width="1.5"/><rect x="43" y="18" width="19" height="23" rx="5" fill="#d234a110" stroke="#d234a1" stroke-width="1.5" transform="rotate(-13 52 30)"/><path d="m71 4 2.5 7.5L81 14l-7.5 2.5L71 24l-2.5-7.5L61 14l7.5-2.5Z" fill="#2476ef18" stroke="#7c9cc1" stroke-width="1.2"/></svg></div>
+          <div class="key-copy"><h3>Beyond familiar objects</h3><p>Unseen objects. Unusual shapes.</p></div><span class="key-arrow" aria-hidden="true">↗</span>
+        </a>
+      </div>
+    </section>
+
+    <section class="section wrap" id="explore" aria-labelledby="explore-title">
+      <div class="section-heading">
+        <div><h2 id="explore-title">Explore the model</h2></div>
+        <div class="explore-heading-tools"><button class="explorer-help-button" id="explorer-help-open" aria-haspopup="dialog" aria-controls="explorer-help"><span aria-hidden="true">?</span> Help</button></div>
+      </div>
+      <div id="dataset-tabs" class="dataset-tabs" role="group" aria-label="Dataset"></div>
+      <div class="explorer real-explorer">
+        <div class="scan-workspace">
+          <div class="scan-toolbar">
+            <div class="scan-title" id="real-case-title"></div>
+            <div class="toolbar-buttons"><button id="undo" class="icon-button" aria-label="Undo selection" title="Undo selection" disabled>↶</button><button id="reset" class="icon-button" aria-label="Reset demo" title="Reset demo">↻</button><button id="expand" class="icon-button" aria-label="Expand demo" title="Expand demo" aria-expanded="false">⤢</button></div>
+          </div>
+          <div class="real-stage" id="scan-stage">
+            <img id="real-image" alt="Selected X-ray scan" draggable="false">
+            <img id="real-mask" alt="LAO-X predicted mask" draggable="false">
+            <svg id="real-overlay" aria-label="Available point prompts"></svg>
+          </div>
+          <div class="scan-footer"><span id="selection-status" role="status" aria-live="polite"></span></div>
+        </div>
+        <aside class="scan-controls" aria-label="Demo controls">
+          <div class="label-row"><span>Point prompt</span><span id="point-count"></span></div>
+          <div id="real-point-choices" aria-label="Point prompts"></div>
+          <div class="label-row"><label for="granularity">Granularity</label><output id="granularity-output" for="granularity">0.1</output></div>
+          <input type="range" id="granularity" min="0.1" max="1" step="0.1" value="0.1">
+          <div class="range-labels"><span>0.1</span><span id="granularity-max">1.0</span></div>
+          <div class="iou-chart"><div class="curve-heading"><span title="Overlap between the predicted tight box and GT box">IoU with GT</span><button id="best-match" class="curve-best" title="Select the best granularity for this point"></button></div><svg id="iou-curve" viewBox="0 0 272 135" role="group" aria-label="IoU with GT across granularity"></svg></div>
+          <div class="segmented" role="group" aria-label="Overlay display"><button class="is-active" data-display="mask" aria-pressed="true">Mask</button><button data-display="box" aria-pressed="false">Predicted box</button></div>
+          <div class="label-row opacity-label"><label for="opacity">Mask opacity</label><output id="opacity-output" for="opacity">62%</output></div>
+          <input type="range" id="opacity" min="10" max="80" step="1" value="62">
+          <label class="gt-toggle"><input id="show-gt" type="checkbox"><span>Show GT box</span><i></i></label>
+          <a id="download-mask" class="mask-download" download>Download mask <span>↓</span></a>
+        </aside>
+      </div>
+      <div class="gallery-heading"><span id="gallery-label">10 scans</span></div>
+      <div id="real-gallery" class="real-gallery" role="group" aria-label="Selected scans"></div>
+
+    </section>
+
+    <section class="capabilities wrap" aria-labelledby="capabilities-title">
+      <div class="mini-heading"><h3 id="capabilities-title">Beyond familiar objects.</h3><span>Real examples from the paper <span class="mini-arrow">↙</span></span></div>
+      <div class="capability-grid">
+        <button class="capability" data-case="hazard"><div class="capability-image"><img src="assets/hazard-1.png" alt="Paper prediction on a 3D-printed plastic pistol" loading="lazy"></div><span>Unconventional threats <span>↗</span></span><small>3D-printed plastic pistol</small></button>
+        <button class="capability" data-case="unseen"><div class="capability-image"><img src="assets/unseen-1.png" alt="Paper prediction on an unseen lizard object" loading="lazy"></div><span>Unseen objects <span>↗</span></span><small>Beyond a fixed vocabulary</small></button>
+        <button class="capability" data-case="shapes"><div class="capability-image"><img src="assets/shapes-1.png" alt="Paper predictions of scissors with different shapes" loading="lazy"></div><span>Everyday, in every shape <span>↗</span></span><small>Common objects, varied forms</small></button>
+        <button class="capability" data-case="multipart"><div class="capability-image"><img src="assets/multipart-1.png" alt="Paper prediction on a multi-part electronic instance" loading="lazy"></div><span>Multi-part instances <span>↗</span></span><small>From components to objects</small></button>
+        <button class="capability" data-case="transparent"><div class="capability-image"><img src="assets/transparent-1.png" alt="Paper prediction on a highly transparent plastic bottle" loading="lazy"></div><span>Almost invisible <span>↗</span></span><small>Low-attenuation materials</small></button>
+      </div>
+    </section>
+
+    <section class="section comparison-section" id="comparison" aria-labelledby="comparison-title">
+      <div class="wrap">
+        <div class="section-heading"><div><h2 id="comparison-title">Qualitative comparison</h2><p>Cleaner boundaries and more complete instances, even under heavy overlap.</p></div><a class="text-link" href="https://arxiv.org/pdf/2610.07326v1#page=8" target="_blank" rel="noopener">View in the paper <span>↗</span></a></div>
+        <div class="comparison-topline"><div class="comparison-tabs" role="group" aria-label="Comparison scene"><button class="is-active" data-scene="case" aria-pressed="true">Everyday items</button><button data-scene="jug" aria-pressed="false">Fine structures</button><button data-scene="bottle" aria-pressed="false">Transparent objects</button><button data-scene="clutter" aria-pressed="false">Heavy clutter</button></div><span class="tiny-label">TOP-5 CONFIDENT MASKS</span></div>
+        <div class="comparison-grid" id="comparison-grid"></div>
+        <div class="comparison-caption"><span><span class="blue-dot"></span> Original predictions from Figure 3. Grayscale scans make masks easier to inspect.</span><button class="text-link" id="open-compare">Drag to compare <span>↔</span></button></div>
+      </div>
+    </section>
+
+    <section class="section wrap" id="results" aria-labelledby="results-title">
+      <div class="section-heading"><div><h2 id="results-title">Performance across six benchmarks</h2><p>Stronger box localization than SAM2, SAM3, and UnSAMv2 across all six test-only datasets.</p></div><div class="metric-switch segmented" role="group" aria-label="Benchmark metric"><button data-metric="0" aria-pressed="false">AP₅₀</button><button data-metric="1" aria-pressed="false">AP₇₅</button><button data-metric="2" class="is-active" aria-pressed="true">mAP</button></div></div>
+      <div class="benchmark-grid" id="benchmark-grid"></div>
+      <div class="benchmark-bottom"><div class="chart-legend"><span style="--legend:#9aa9bb">SAM2</span><span style="--legend:#eca855">SAM3</span><span style="--legend:#b497d2">UnSAMv2</span><span style="--legend:#2476ef">LAO-X <b>(ours)</b></span></div><button class="text-link" id="toggle-results" aria-expanded="false" aria-controls="full-results">Full results & evaluation <span>＋</span></button></div>
+      <div id="full-results" class="full-results" hidden></div>
+      <div class="results-callout"><div><span class="callout-icon">↗</span><p><strong>64.06<span>%</span></strong><span>mIoU on PIXray</span></p></div><p>More precise masks.<br><span>+12.54 points over UnSAMv2.</span></p><a class="text-link" href="https://arxiv.org/pdf/2610.07326v1#page=7" target="_blank" rel="noopener">Segmentation results <span>↗</span></a></div>
+    </section>
+
+    <section class="section method-section" id="method" aria-labelledby="method-title">
+      <div class="wrap">
+        <div class="section-heading"><div><h2 id="method-title">Method overview</h2><p>Unlabeled scans become a world of structured training examples.</p></div><button class="text-link" id="view-pipeline">View the full pipeline <span>↗</span></button></div>
+        <div class="method-grid">
+          <article class="method-card"><span class="step-number">01</span><h3>Discover the objects</h3><div class="method-art mining-art"><img src="assets/hazard-0.png" alt="Unlabeled source scan example" loading="lazy"><span>→</span><img src="assets/hazard-1.png" alt="An object-centric mask example" loading="lazy"></div><p>Saliency-guided mining turns unlabeled scans into an object bank.</p></article>
+          <article class="method-card"><span class="step-number">02</span><h3>Compose with physics</h3><div class="method-art physics-art"><span class="physics-layer layer-a"></span><span class="physics-layer layer-b"></span><span class="physics-equation">A<sub>scene</sub> = A<sub>bg</sub> + ∑ A<sub>i</sub></span></div><p>Combine dual-energy scans in the Beer–Lambert absorbance domain.</p></article>
+          <article class="method-card curriculum-card" data-stage="easy"><span class="step-number">03</span><h3>Build up the challenge</h3><div class="method-art curriculum-art" aria-hidden="true"><span><i></i><i></i></span><b>→</b><span><i></i><i></i><i></i><i></i></span><b>→</b><span><i></i><i></i><i></i><i></i><i></i><i></i></span></div><div class="curriculum-steps" role="group" aria-label="Scene complexity"><button class="is-active" data-tier="easy" aria-pressed="true">Easy</button><button data-tier="hard" aria-pressed="false">Hard</button><button data-tier="extreme" aria-pressed="false">Extreme</button></div><div class="tier-stats" id="tier-stats" aria-live="polite"><span><strong>2–4</strong> objects</span><span><strong>0.05</strong> max overlap</span></div><p>From sparse scenes to heavy overlap.</p></article>
+          <article class="method-card"><span class="step-number">04</span><h3>See the whole picture</h3><div class="method-art result-art"><img src="assets/granularity-scissors-1.png" alt="Real LAO-X holistic mask from the paper" loading="lazy"></div><p>Use a point and granularity to localize a part or a complete instance.</p></article>
+        </div>
+      </div>
+    </section>
+
+    <section class="citation-section wrap" id="citation" aria-labelledby="citation-title">
+      <div class="citation-heading">
+        <div class="citation-title"><h2 id="citation-title">BibTeX</h2><span>NeurIPS 2026</span></div>
+        <button class="citation-copy" id="copy-bibtex" aria-label="Copy BibTeX"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="12" height="13" rx="2"/><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3"/></svg><span>Copy</span></button>
+      </div>
+      <pre class="citation-code" tabindex="0" aria-label="BibTeX citation"><code id="bibtex">@inproceedings{cai2026laox,
+  title     = {Localize Any Object in {X-Ray} Security Scans without Human Annotation},
+  author    = {Cai, Yaqi and Liu, Mingxuan and Vaquero, Lorenzo and Wang, Ning and Pu, Nan and Xue, Feng and Ricci, Elisa and Sebe, Nicu},
+  booktitle = {Advances in Neural Information Processing Systems},
+  year      = {2026}
+}</code></pre>
+    </section>
+  </main>
+
+  <footer><div class="wrap footer-main"><div><a class="brand" href="#">LAO<span>-X</span><i></i></a><p>Localize Any Object in X-Ray Security Scans<br>without Human Annotation.</p></div><div class="footer-links"><a href="https://arxiv.org/pdf/2610.07326v1" target="_blank" rel="noopener">Paper ↗</a><a href="https://github.com/yaqicai/LAO-X" target="_blank" rel="noopener">Code ↗</a><a href="https://huggingface.co/YAQICAI/LAO-X" target="_blank" rel="noopener">Model ↗</a><a href="#explore">Demo ↗</a></div></div><div class="wrap footer-bottom"><span>LAO-X · Research project · 2026</span><a href="#" aria-label="Back to top">↑</a></div></footer>
+
+  <dialog id="lightbox" aria-labelledby="dialog-title"><div class="dialog-heading"><h2 id="dialog-title"></h2><button class="icon-button" id="close-dialog" aria-label="Close dialog">×</button></div><div id="dialog-body"></div></dialog>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+</body>
+</html>

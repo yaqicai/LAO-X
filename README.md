@@ -1,7 +1,7 @@
-# LAO-X
+# LAO-X project website
 
-Official implementation of "Localize Any Object in X-Ray Security Scans without Human Annotation" (NeurIPS 2026).
+Deployed static files for [the LAO-X project page](https://yaqicai.github.io/LAO-X/).
 
-[Project website](https://yaqicai.github.io/LAO-X/) · [Paper](https://arxiv.org/abs/2610.07326)
+Edit the [website-source branch](https://github.com/yaqicai/LAO-X/tree/website-source), then run `npm run build` and publish `dist/` here. GitHub Pages serves this branch from `/`.
 
-Code coming soon. The project website is maintained on the `website` branch.
+Source commit: [ff7f628](https://github.com/yaqicai/LAO-X/commit/ff7f62867f6a2b2ae43c75c5173a2c3ee29fbb20).
