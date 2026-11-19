@@ -1,0 +1,15 @@
+# 实验数据和大型输出目录
+
+output_eval/
+output_visualization/
+output_visualization_old/
+results/
+sam2/
+interactive_vis/
+wandb/
+
+# IDE 和系统缓存
+.DS_Store
+__pycache__/
+.vscode/
+*.pyc

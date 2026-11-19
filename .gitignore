@@ -1,0 +1,36 @@
+# Python / build
+__pycache__/
+*.py[cod]
+*.so
+*.o
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.mypy_cache/
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+
+# External dependencies cloned by the installer
+granularity_divide_and_conquer/dinov3/
+
+# Weights, caches and generated data
+*.pt
+*.pth
+*.ckpt
+*.safetensors
+*.pkl
+wandb/
+/checkpoints/
+/ckpts/
+/results/
+/output/
+/outputs/
+/output_eval/
+/output_visualization*/
+/logs/
+/datasets/
+/hf_cache/
