@@ -1,11 +1,14 @@
 #!/usr/bin/env bash
 # Object-bank ablation: build the curriculum from CutLER-only masks instead of
 # CutLER x MuSc, then train with the paper schedule.
-#   VARIANT=n1 (default): 1 detection per image  -> coco_cutler_ori.json
-#   VARIANT=n3          : 3 detections per image -> coco_cutler_ori_N3.json
-# Create the object-bank JSON first, e.g.
-#   MODE=ori bash third_party/CutLER/cutler/demo/laox_object_bank.sh
-# (see third_party/CutLER/LAOX_CHANGES.md for the N3 variant).
+# N1 / N3 = number of CutLER predictions kept per image:
+#   VARIANT=n1 (default): 1 prediction per image  -> coco_cutler_ori.json
+#   VARIANT=n3          : 3 predictions per image -> coco_cutler_ori_N3.json
+# Create the object-bank JSON first:
+#   n1: MODE=ori bash third_party/CutLER/cutler/demo/laox_object_bank.sh
+#   n3: MODE=ori EXTRA_OPTS="TEST.DETECTIONS_PER_IMAGE 3" \
+#         COCO_OUTPUT=$LAOX_DATA_ROOT/det_compass_xp/annotations/coco_cutler_ori_N3.json \
+#         bash third_party/CutLER/cutler/demo/laox_object_bank.sh
 set -euo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
 

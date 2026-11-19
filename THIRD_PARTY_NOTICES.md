@@ -1,8 +1,11 @@
 # Third-party components
 
+LAO-X as a whole is distributed under CC BY-NC-SA 4.0 ([LICENSE](LICENSE)).
+The components below keep their original licenses and copyright notices.
+
 | Component | Location | Upstream | Base commit | License | Modified for LAO-X |
 | --- | --- | --- | --- | --- | --- |
-| UnSAMv2 | repository root, `evaluation/`, `granularity_divide_and_conquer/` | [yujunwei04/UnSAMv2](https://github.com/yujunwei04/UnSAMv2) | — | Apache-2.0 ([LICENSE](LICENSE)) | yes |
+| UnSAMv2 | repository root, `evaluation/`, `granularity_divide_and_conquer/` | [yujunwei04/UnSAMv2](https://github.com/yujunwei04/UnSAMv2) | — | Apache-2.0 ([LICENSE-APACHE-2.0](LICENSE-APACHE-2.0)) | yes |
 | SAM 2 | `sam2/` | [facebookresearch/sam2](https://github.com/facebookresearch/sam2) | — | Apache-2.0 ([sam2/LICENSE](sam2/LICENSE)); cc_torch BSD-3-Clause ([sam2/LICENSE_cctorch](sam2/LICENSE_cctorch)) | yes |
 | Mask2Former ops / CutLER configs used by divide-and-conquer | `granularity_divide_and_conquer/` | via UnSAMv2 | — | see upstream | no |
 | MuSc | `third_party/MuSc/` | [xrli-U/MuSc](https://github.com/xrli-U/MuSc) | `72d58ad` | MIT ([LICENSE](third_party/MuSc/LICENSE)) | yes, see [LAOX_CHANGES.md](third_party/MuSc/LAOX_CHANGES.md) |
@@ -12,9 +15,9 @@
 | Detectron2 (xyz fork) | not vendored; installed by `environment/rebuild_environment.sh` | [MaureenZOU/detectron2-xyz](https://github.com/MaureenZOU/detectron2-xyz) | `42121d7` | Apache-2.0 | no |
 | DINOv3 | not vendored; cloned into `granularity_divide_and_conquer/dinov3` | [facebookresearch/dinov3](https://github.com/facebookresearch/dinov3) | `54694f7` | DINOv3 License | no |
 
-Modified files keep their original copyright headers. Modifications to
-CutLER files are distributed under CC BY-NC-SA 4.0, the license of the
-original files.
+Modified files keep their original copyright headers. The LAO-X
+modifications and additions are released under CC BY-NC-SA 4.0; the
+unmodified upstream parts remain under their original licenses.
 
 ## Pretrained weights (not distributed)
 

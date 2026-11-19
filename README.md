@@ -71,6 +71,8 @@ The DET-COMPASS source images are expected in
 | `coco_agnostic.json` | held-out evaluation images (class-agnostic COCO); excluded from the object bank |
 | `huggingface_matches.json` | local file name → DET-COMPASS split/index (`synthesis/generate.py match`) |
 
+These annotation files are not distributed with this repository at the moment.
+
 ## Pipeline
 
 ```bash
@@ -115,15 +117,34 @@ Evaluation uses the extreme-stage `checkpoint_48.pt`, granularities
 
 | Script | Ablation |
 | --- | --- |
-| `ablation/object_bank_cutler_only.sh` | CutLER-only object bank (`VARIANT=n1` or `n3`) |
+| `ablation/object_bank_cutler_only.sh` | CutLER-only object bank without MuSc; `VARIANT=n1` / `n3` keeps CutLER's top 1 / 3 predictions per image |
 | `ablation/composition_rgb.sh` | RGB copy-paste instead of high/low-energy composition |
 | `ablation/extreme_difficulty.sh {00_07,00_09,9_12,12_15}` | harder final curriculum stage |
 | `ablation/label_source.sh {holistic,part}` | train on object masks only / oversegmentation only |
 
 ## License
 
-Code written for LAO-X and the UnSAMv2/SAM 2 code it builds on are released
-under the Apache License 2.0 ([LICENSE](LICENSE)). Third-party components keep
-their own licenses; in particular the modified CutLER code in
-`third_party/CutLER` is under CC BY-NC-SA 4.0. See
+LAO-X is released under the
+[Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International](https://creativecommons.org/licenses/by-nc-sa/4.0/)
+license ([LICENSE](LICENSE)); it may be used for non-commercial purposes only.
+Third-party code included in this repository keeps its original license and
+copyright notices: the UnSAMv2 and SAM 2 code is under the Apache License 2.0
+([LICENSE-APACHE-2.0](LICENSE-APACHE-2.0), [sam2/LICENSE](sam2/LICENSE)) and
+MuSc and TokenCut are under the MIT license. See
 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+
+## Citation
+
+If you use LAO-X in your research, please cite:
+
+```bibtex
+@misc{cai2026localizeobjectxraysecurity,
+      title={Localize Any Object in X-Ray Security Scans without Human Annotation},
+      author={Yaqi Cai and Mingxuan Liu and Lorenzo Vaquero and Ning Wang and Nan Pu and Feng Xue and Elisa Ricci and Nicu Sebe},
+      year={2026},
+      eprint={2610.07326},
+      archivePrefix={arXiv},
+      primaryClass={cs.CV},
+      url={https://arxiv.org/abs/2610.07326},
+}
+```

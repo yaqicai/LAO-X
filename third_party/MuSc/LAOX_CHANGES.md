@@ -1,8 +1,9 @@
 # LAO-X changes to MuSc
 
 - Upstream: https://github.com/xrli-U/MuSc, commit `72d58ad` ("Add files via upload").
-- License: MIT (see `LICENSE`, unchanged). The LAO-X modifications below are
-  distributed under the same license.
+- License: MIT (see `LICENSE`, unchanged) for the upstream code. The LAO-X
+  modifications below are released under CC BY-NC-SA 4.0, like the rest of
+  LAO-X.
 - Use in LAO-X: object-bank step 1, zero-shot anomaly heatmaps for unlabeled
   X-ray images (`scripts/laox_heatmaps.sh`). Only the forward heatmaps
   `*_musc_vanilla.png` are used downstream; the inverse maps are not.
