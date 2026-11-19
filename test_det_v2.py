@@ -1550,11 +1550,7 @@ def load_categories(json_path):
     return [cat.get("name", str(cat.get("id"))) for cat in data.get("categories", [])]
 
 
-# with open("/path/to/datasets/pidray/pidray/annotations/xray_train.json", "r", encoding="utf-8") as f:
-#         data = json.load(f)
 def register_dataset(name, json_path, image_root):
-    # if name in DatasetCatalog.list():
-    #     return
     register_coco_instances(name, {}, json_path, image_root)
     classes = load_categories(json_path)
     if classes:
@@ -1868,11 +1864,11 @@ def parse_args():
     parser.add_argument(
         "--wandb",
         action=argparse.BooleanOptionalAction,
-        default=True,
-        help="Enable Weights & Biases logging.",
+        default=False,
+        help="Enable Weights & Biases logging (opt-in).",
     )
-    parser.add_argument("--wandb-project", default="unsamv2-eval")
-    parser.add_argument("--wandb-entity", default=None)
+    parser.add_argument("--wandb-project", default=os.environ.get("WANDB_PROJECT", "lao-x-eval"))
+    parser.add_argument("--wandb-entity", default=os.environ.get("WANDB_ENTITY"))
     parser.add_argument("--wandb-run-name", default=None)
     
     return parser.parse_args()
@@ -2152,7 +2148,6 @@ def main():
             tasks=tasks,
             task_agnostic=False,
         )
-        # merged_path = "/path/to/LAO-X/output_eval/pixray_img0_5047_unsamv2_0.7/coco_instances_results.json"
         print("evaluating merged results from:", merged_path)
         from pycocotools.coco import COCO
         from pycocotools.cocoeval import COCOeval
@@ -2163,29 +2158,7 @@ def main():
         cocoEval.accumulate()
         cocoEval.summarize()
         _wandb_log_metrics("bbox", _metrics_from_coco_stats(cocoEval.stats))
-        # results = _eval_merged_coco_results(evaluator, coco_results)
-        # print(results)
         return
-    # if args.exist_result:
-    #     from pycocotools.coco import COCO
-    #     from pycocotools.cocoeval import COCOeval
-    #     with open("/path/to/LAO-X/temp_det_compass_syn_100_val_0_5000.json", "r", encoding="utf-8") as f:
-    #         coco_gt = json.load(f)
-    #     test_loader = build_detection_test_loader(cfg, dataset_name)
-    #     evaluator = COCOEvaluator(dataset_name, cfg, False, output_dir="./output_eval/{}_unsamv2_gra_fusion/".format(args.dataset))
-    #     evaluator.reset()
-    #     print("test_loader image:{}, object:{}".format(len(test_loader.dataset), len(coco_gt['annotations'])))
-    #     cocoGt = COCO(os.path.join(XrayRoot[args.dataset], "coco_agnostic.json"))
-
-    #     # 模型原结果
-    #     cocoDt = cocoGt.loadRes("/path/to/ovod_xray/detectron2_series/xray_ovod_det2/sam2_eval_det_compass_syn_promptrcnn_05/coco_instances_results.json")
-
-    #     # 按 bbox 评估
-    #     cocoEval = COCOeval(cocoGt, cocoDt, "bbox")
-    #     cocoEval.evaluate()
-    #     cocoEval.accumulate()
-    #     cocoEval.summarize()
-    #     return
     if args.method == "unsamv2":
         if not args.sam2_ckpt:
             raise ValueError("--sam2-ckpt is required when method is unsamv2")
@@ -2225,7 +2198,6 @@ def main():
 
         )
         classes = MetadataCatalog.get(dataset_name).thing_classes
-        # print(len(classes))
         cfg = build_cfg("", args.config, args.score_thresh, len(classes))
         cfg.TEST.IMS_PER_BATCH = args.test_batch
         cfg.DATALOADER.NUM_WORKERS = args.num_workers

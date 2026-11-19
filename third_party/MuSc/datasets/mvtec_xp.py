@@ -1,3 +1,8 @@
+"""LAO-X: MVTec-style loader for a flat folder of unlabeled X-ray images.
+
+Used with ``--dataset_name mvtec_xp --data_path <image dir>`` to produce MuSc
+zero-shot heatmaps for every image in the folder (object-bank step 1).
+"""
 import os
 from enum import Enum
 import PIL
@@ -53,8 +58,6 @@ class MVTecDataset(torch.utils.data.Dataset):
                 self.data_to_iterate = [self.data_to_iterate[i] for i in indices]
         if clip_transformer is None:
             self.transform_img = [
-                # transforms.Resize((resize,resize)),
-                # transforms.CenterCrop(imagesize),
                 transforms.ToTensor(),
                 transforms.Normalize(mean=IMAGENET_MEAN, std=IMAGENET_STD),
             ]
@@ -63,8 +66,6 @@ class MVTecDataset(torch.utils.data.Dataset):
             self.transform_img = clip_transformer
             
         self.transform_mask = [
-            # transforms.Resize((resize,resize)),
-            # transforms.CenterCrop(imagesize),
             transforms.ToTensor(),
         ]
         self.transform_mask = transforms.Compose(self.transform_mask)
@@ -119,42 +120,24 @@ class MVTecDataset(torch.utils.data.Dataset):
         imgpaths_per_class = {}
         maskpaths_per_class = {}
         
+        # Flat, unlabeled image folder: every file directly under `source` is one test
+        # image of a single pseudo-anomaly type; no ground-truth masks are available.
         for classname in self.classnames_to_use:
-            classpath = self.source
-            maskpath = self.source
-                # classpath = os.path.join(self.source, classname, self.split.value)
-                # maskpath = os.path.join(self.source, classname, "ground_truth")
-            # anomaly_types = os.listdir(classpath)
             anomaly = 'temp'
             imgpaths_per_class[classname] = {}
             maskpaths_per_class[classname] = {}
-            anomaly_path = classpath
-            # for anomaly in anomaly_types:
-            #     anomaly_path = os.path.join(classpath, anomaly)
+            anomaly_path = self.source
             anomaly_files = sorted(os.listdir(anomaly_path))
-            # anomaly_files = anomaly_files[:100]
             imgpaths_per_class[classname][anomaly] = [
                 os.path.join(anomaly_path, x) for x in anomaly_files
             ]
-
-            # if self.split == DatasetSplit.TEST and anomaly != "good":
-            #     anomaly_mask_path = os.path.join(maskpath, anomaly)
-            #     anomaly_mask_files = sorted(os.listdir(anomaly_mask_path))
-            #     maskpaths_per_class[classname][anomaly] = [
-            #         os.path.join(anomaly_mask_path, x) for x in anomaly_mask_files
-            #     ]
-            # else:
             maskpaths_per_class[classname]["good"] = None
 
         data_to_iterate = []
         for classname in sorted(imgpaths_per_class.keys()):
             for anomaly in sorted(imgpaths_per_class[classname].keys()):
-                for i, image_path in enumerate(imgpaths_per_class[classname][anomaly]):
-                    data_tuple = [classname, anomaly, image_path]
-                    # if self.split == DatasetSplit.TEST and anomaly != "good":
-                    #     data_tuple.append(maskpaths_per_class[classname][anomaly][i])
-                    # else:
-                    data_tuple.append(None)
+                for image_path in imgpaths_per_class[classname][anomaly]:
+                    data_tuple = [classname, anomaly, image_path, None]
                     data_to_iterate.append(data_tuple)
 
         return imgpaths_per_class, data_to_iterate

@@ -1,9 +1,18 @@
 #!/usr/bin/env bash
+# Zero-shot SAM 2 baseline (ultralytics SAM "everything" mode) with test_sam2.py,
+# sharded over the GPUs in GPUS.
+#
+# Usage: [VAR=value ...] bash scripts/task_test_sam2.sh [COMMENT]
+# Environment: DATASET [det_compass_xp], GPUS [0], CONF [0.25], START_ID [0],
+# END_ID [all images], SAM2_CKPT [${LAOX_CKPT_ROOT}/sam2.1_s.pt, ultralytics
+# weights], OUTPUT_DIR [<repo>/output_eval], PYTHON [python].
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 cd "${REPO_ROOT}"
+PYTHON="${PYTHON:-python}"
+LAOX_CKPT_ROOT="${LAOX_CKPT_ROOT:-${REPO_ROOT}/checkpoints}"
 
 COMMENT="${1:-}"
 if [[ -n "${COMMENT}" ]]; then
@@ -14,8 +23,8 @@ fi
 
 GPUS="${GPUS:-0}"
 DATASET="${DATASET:-det_compass_xp}"
-SAM2_CKPT="${SAM2_CKPT:-/path/to/checkpoints/sam2.1_s.pt}"
-OUTPUT_DIR="${OUTPUT_DIR:-/path/to/LAO-X/output_eval}"
+SAM2_CKPT="${SAM2_CKPT:-${LAOX_CKPT_ROOT}/sam2.1_s.pt}"
+OUTPUT_DIR="${OUTPUT_DIR:-${REPO_ROOT}/output_eval}"
 CONF="${CONF:-0.25}"
 
 START_ID="${START_ID:-0}"
@@ -27,7 +36,7 @@ if [[ "${NUM_GPUS}" -le 0 ]]; then
   exit 1
 fi
 
-TOTAL_IMAGES="$(DATASET="${DATASET}" python - <<PY
+TOTAL_IMAGES="$(DATASET="${DATASET}" "${PYTHON:-python}" - <<PY
 from config import XrayRoot
 import json, os
 
@@ -78,7 +87,7 @@ run_shard() {
   local end_id="$3"
   echo "[sam2] dataset=${DATASET} gpu=${gpu} start=${start_id} end=${end_id}"
   CUDA_VISIBLE_DEVICES="${gpu}" \
-    python test_sam2.py \
+    "${PYTHON:-python}" test_sam2.py \
       --dataset "${DATASET}" \
       --sam2-ckpt "${SAM2_CKPT}" \
       --output-dir "${OUTPUT_DIR}" \

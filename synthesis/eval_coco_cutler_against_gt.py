@@ -1,3 +1,10 @@
+"""Evaluate object-bank COCO files against a labelled COCO file (bbox AP/AR).
+
+Images are matched by file name; prediction scores default to 1.0.
+
+    python eval_coco_cutler_against_gt.py --gt_path coco_agnostic.json \
+        --pred_paths coco_cutler_musc.json coco_cutler_ori.json [--output_json metrics.json]
+"""
 import argparse
 import json
 import os
@@ -5,20 +12,6 @@ from typing import Dict, List, Tuple
 
 from pycocotools.coco import COCO
 from pycocotools.cocoeval import COCOeval
-
-
-DEFAULT_BASE_DIR = "/path/to/datasets/det_compass_xp"
-DEFAULT_GT_PATH = os.path.join(DEFAULT_BASE_DIR, "coco_agnostic_1928.json") # coco_agnostic.json
-DEFAULT_PRED_PATHS = [
-    os.path.join(DEFAULT_BASE_DIR, "coco_cutler_musc.json"),
-    os.path.join(DEFAULT_BASE_DIR, "coco_cutler_ori.json"),
-    os.path.join(DEFAULT_BASE_DIR, "coco_cutler_ori_N3.json"),
-    os.path.join(DEFAULT_BASE_DIR, "coco_musc_thr0p5.json"),
-    os.path.join(DEFAULT_BASE_DIR, "coco_musc_thr0p6.json"),
-    os.path.join(DEFAULT_BASE_DIR, "coco_musc_thr0p7.json"),
-    os.path.join(DEFAULT_BASE_DIR, "coco_musc_thr0p8.json"),
-    os.path.join(DEFAULT_BASE_DIR, "coco_musc_thr0p9.json"),
-]
 
 COCO_STAT_NAMES = [
     "AP",
@@ -142,13 +135,13 @@ def main() -> None:
     )
     parser.add_argument(
         "--gt_path",
-        default=DEFAULT_GT_PATH,
+        required=True,
         help="Ground-truth COCO json path.",
     )
     parser.add_argument(
         "--pred_paths",
         nargs="+",
-        default=DEFAULT_PRED_PATHS,
+        required=True,
         help="Prediction COCO json paths to evaluate.",
     )
     parser.add_argument(

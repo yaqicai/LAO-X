@@ -1,5 +1,11 @@
 #!/usr/bin/env python3
-"""Evaluate three training seeds under the fixed S3-1.5 detection protocol."""
+"""Evaluate three training seeds under the fixed S3-1.5 detection protocol.
+
+Paths: annotations from ``$LAOX_DATA_ROOT`` (default ``<repo>/datasets``);
+predictions from ``$LAOX_OUTPUT_EVAL`` (default ``<repo>/output_eval``);
+reports to ``$LAOX_RESULTS_ROOT/analysis/seed_robustness`` (default
+``<repo>/results``) unless ``--output-dir`` is given.
+"""
 
 from __future__ import annotations
 
@@ -8,6 +14,7 @@ import contextlib
 import csv
 import io
 import json
+import os
 from pathlib import Path
 
 import numpy as np
@@ -20,10 +27,11 @@ from analyze_protocol_false_positives import (
 )
 
 
-PROJECT_ROOT = Path("/path/to/LAO-X")
-RESULT_ROOT = Path("/path/to/results/output_eval")
-PROJECT_OUTPUT = PROJECT_ROOT / "output_eval"
-DATA_ROOT = Path("/path/to/datasets")
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+RESULT_ROOT = Path(os.environ.get("LAOX_OUTPUT_EVAL", PROJECT_ROOT / "output_eval"))
+PROJECT_OUTPUT = RESULT_ROOT
+DATA_ROOT = Path(os.environ.get("LAOX_DATA_ROOT", PROJECT_ROOT / "datasets"))
+RESULTS_ROOT = Path(os.environ.get("LAOX_RESULTS_ROOT", PROJECT_ROOT / "results"))
 
 DATASETS = {
     "DET-COMPASS": {
@@ -111,7 +119,7 @@ def main() -> None:
     parser.add_argument(
         "--output-dir",
         type=Path,
-        default=PROJECT_ROOT / "analysis" / "seed_robustness",
+        default=RESULTS_ROOT / "analysis" / "seed_robustness",
     )
     args = parser.parse_args()
     args.output_dir.mkdir(parents=True, exist_ok=True)

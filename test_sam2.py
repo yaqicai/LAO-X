@@ -11,6 +11,9 @@ from ultralytics import SAM
 
 from config import XrayImgRoot, XrayRoot
 
+REPO_ROOT = os.path.dirname(os.path.abspath(__file__))
+CKPT_ROOT = os.environ.get("LAOX_CKPT_ROOT", os.path.join(REPO_ROOT, "checkpoints"))
+
 
 def _resolve_coco_json(dataset_root: str) -> str | None:
     dataset_name = os.path.basename(os.path.normpath(dataset_root)).lower()
@@ -61,12 +64,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--dataset", default="det_compass_xp", help="Dataset name")
     parser.add_argument(
         "--sam2-ckpt",
-        default="/path/to/checkpoints/sam2.1_s.pt",
-        help="Path to SAM2 checkpoint",
+        default=os.path.join(CKPT_ROOT, "sam2.1_s.pt"),
+        help="Path to SAM2 checkpoint (ultralytics format; default: $LAOX_CKPT_ROOT/sam2.1_s.pt)",
     )
     parser.add_argument(
         "--output-dir",
-        default="/path/to/LAO-X/output_eval",
+        default=os.path.join(REPO_ROOT, "output_eval"),
         help="Root output directory",
     )
     parser.add_argument("--start-id", type=int, default=0, help="Start image index")

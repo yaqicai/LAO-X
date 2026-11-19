@@ -84,10 +84,10 @@ def get_parser():
     )
     parser.add_argument(
         "--musc_dir",
-        help="A file or directory to save output visualizations. ",
+        help="LAO-X: directory of JET-colorized MuSc heatmaps named <input stem>.png; "
+        "if given, each input image is fused with its heatmap (see --fusion_mode).",
         default=None,
         type=str,
-        # "If not given, will show output in an OpenCV window.",
     )
     parser.add_argument(
         "--vis_demo",
@@ -157,63 +157,43 @@ def test_opencv_video_format(codec, file_ext):
         return False
 
 def recover_heatmap_from_image(img):
+    """LAO-X: invert cv2.COLORMAP_JET, mapping a BGR heatmap image back to [0, 1]."""
     from scipy.spatial.distance import cdist
-    # 1. 读取热力图图像
-    # 注意：cv2 读取的是 BGR 格式，与 applyColorMap 的默认输出一致
-    # image = cv2.imread(img_path)
+    # cv2 images are BGR, matching the output of cv2.applyColorMap.
     image = img
     if image is None:
-        raise ValueError("无法读取图像")
-    
+        raise ValueError("Failed to read heatmap image")
+
     h, w, c = image.shape
 
-    # 2. 生成标准的 JET 颜色查找表 (LUT)
-    # 我们模拟一遍 0-255 变成 JET 颜色的过程
+    # JET lookup table: the colour of every grey level 0..255, shape (256, 3).
     gradient_values = np.arange(256, dtype=np.uint8).reshape(1, 256)
-    # 得到 (1, 256, 3) 的色盘，squeeze 后变成 (256, 3)
     colormap_lut = cv2.applyColorMap(gradient_values, cv2.COLORMAP_JET).squeeze()
 
-    # 3. 颜色匹配 (最关键步骤)
-    # 我们需要找到图像中每个像素的颜色在 colormap_lut 中的索引
-    
-    # 将图像展平为 (N, 3) 以便计算
+    # For every pixel, find the nearest LUT colour (Euclidean distance);
+    # its index is the original 0..255 grey value. dists has shape (N, 256).
     image_flat = image.reshape(-1, 3).astype(np.float32)
     lut_flat = colormap_lut.astype(np.float32)
-
-    # 计算图像中每个像素与 LUT 中 256 种颜色的欧氏距离
-    # cdist 会返回一个 (N, 256) 的矩阵
-    # 这一步如果图很大可能会慢，可以用 chunk 方式优化，或者直接用 numpy 广播
     dists = cdist(image_flat, lut_flat, 'euclidean')
-
-    # 找到距离最小的索引，这个索引就是原本的 0-255 的灰度值
     original_int_values = np.argmin(dists, axis=1)
 
-    # 4. 还原形状并归一化回 0-1
+    # Reshape and rescale to [0, 1].
     recovered_map_int = original_int_values.reshape(h, w)
-    
-    # 转换回 0.0 - 1.0 的浮点数
     recovered_map_float = recovered_map_int / 255.0
 
     return recovered_map_float
 
 def apply_adaptive_enhancement(mask):
-    # 1. 找到当前矩阵里的最大值 (代表目标的强度)
+    """LAO-X (unused, kept for reference): keep only responses within 80% of the
+    maximum and stretch them back to [0, 1]."""
     max_val = mask.max()
-    
-    # 2. 设定分界线为最大值的 80%
-    # 意味着只有接近最大值的区域才会被保留
-    dynamic_threshold = max_val * 0.8 
-    
-    # 3. 使用上面的 Shifted Sigmoid 或 Clip 方法
-    # 这里演示用 Clip 方法
+    dynamic_threshold = max_val * 0.8
     mask_clipped = np.clip(mask, dynamic_threshold, max_val)
-    
-    # 拉伸回 0-1 (防止整张图都很暗)
     if max_val - dynamic_threshold > 1e-5:
         mask_final = (mask_clipped - dynamic_threshold) / (max_val - dynamic_threshold)
     else:
-        mask_final = mask_clipped * 0 # 避免除零，全黑
-        
+        mask_final = mask_clipped * 0 # avoid division by zero: all-black map
+
     return mask_final
 
 

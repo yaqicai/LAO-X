@@ -7,10 +7,10 @@ without manual masks. It
    heatmaps with CutLER proposals,
 2. **synthesizes** multi-object X-ray images by Beer–Lambert composition of the
    banked objects' high/low-energy channels onto one empty container per
-   image, rendered to colour, grey and density images with lookup tables built
-   from DET-COMPASS (easy / hard / extreme stages),
+   image, rendered to colour with lookup tables built from DET-COMPASS
+   (easy / hard / extreme stages),
 3. produces **oversegmentation** pseudo-labels with granularity
-   divide-and-conquer and **fuses** them with the synthetic ground truth, and
+   divide-and-conquer and **fuses** them with the synthetic object masks, and
 4. trains a granularity-controllable SAM 2 model (UnSAMv2) with an
    **easy-to-hard curriculum**.
 
@@ -23,17 +23,19 @@ synthetic-data generator. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
 ```text
 .
-├── dependencies/det_compass_crops/   # X-ray synthesis (single container, LUT rendering)
-├── third_party/MuSc/                 # object bank, step 1a: anomaly heatmaps
-├── third_party/CutLER/               # object bank, step 1b: heatmap-guided masks
-├── granularity_divide_and_conquer/   # oversegmentation pseudo-labels
-├── pseudo_label_generate.py          # class-agnostic labels + fusion
-├── util_xray.py, gra_fusion.py       # COCO / fusion utilities
-├── sam2/                             # UnSAMv2 model, configs and training code
-├── test_det_v2.py, test_instances.py # whole-image evaluation
-├── evaluation/                       # interactive + whole-image evaluation
-├── scripts/                          # task scripts (synthesis, evaluation, analysis)
-├── ablation/                         # ablation experiment scripts
+├── pipeline/                         # one script per pipeline step (start here)
+├── third_party/MuSc/                 # step 1: anomaly heatmaps (modified MuSc)
+├── third_party/CutLER/               # step 1: heatmap-guided object masks (modified CutLER)
+├── synthesis/                        # step 2: single-container X-ray synthesis
+├── granularity_divide_and_conquer/   # step 3: oversegmentation pseudo-labels
+├── pseudo_label_generate.py          # step 4: class-agnostic labels + fusion
+├── util_xray.py, gra_fusion.py       #         COCO / fusion utilities
+├── sam2/                             # step 5: UnSAMv2 model, configs, curriculum training
+├── test_det_v2.py                    # step 6: whole-image evaluation
+├── scripts/                          #         evaluation, cross-dataset and analysis scripts
+├── evaluation/                       #         interactive (click) evaluation
+├── ablation/                         # ablation experiments
+├── config.py                         # dataset locations
 └── environment/                      # conda environments
 ```
 
@@ -41,29 +43,46 @@ synthetic-data generator. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
 See [INSTALL.md](INSTALL.md).
 
-## Data
+## Data and paths
 
 The source dataset is [DET-COMPASS](https://huggingface.co/datasets/PAGF/DET-COMPASS)
 (`default` configuration, `test` and `invisible` splits, all five energy
 channels). Cross-dataset evaluation additionally uses CLCXray, DvXray, HiXray,
 PIDray and PIXray. Datasets and checkpoints are not distributed with this
-repository. All dataset paths in the scripts are written as
-`/path/to/datasets/...`; edit [config.py](config.py) and the script headers to
-point at your copies.
+repository.
+
+All scripts read their locations from environment variables:
+
+| Variable | Default | Contents |
+| --- | --- | --- |
+| `LAOX_DATA_ROOT` | `<repo>/datasets` | datasets (layout in [config.py](config.py)) and generated synthetic data |
+| `LAOX_CKPT_ROOT` | `<repo>/checkpoints` | `sam2.1_hiera_small.pt`, `cutler_cascade_final.pth`, `dinov3_vitb16_pretrain_lvd1689m-73cec8be.pth` |
+| `LAOX_RESULTS_ROOT` | `<repo>/results` | object-bank intermediates, training runs, analyses |
+| `LAOX_LUT_DIR` | `<repo>/synthesis/luts` | the three high/low-energy lookup tables |
+| `PYTHON`, `GPUS` | `python`, `0,...,7` | interpreter, visible GPUs |
+
+The DET-COMPASS source images are expected in
+`$LAOX_DATA_ROOT/det_compass_xp/xray/`, and the files used by synthesis in
+`$LAOX_DATA_ROOT/det_compass_xp/annotations/`:
+
+| File | Description |
+| --- | --- |
+| `coco_cutler_musc.json` | object bank (output of step 1) |
+| `coco_agnostic.json` | held-out evaluation images (class-agnostic COCO); excluded from the object bank |
+| `huggingface_matches.json` | local file name → DET-COMPASS split/index (`synthesis/generate.py match`) |
 
 ## Pipeline
 
-| Step | Entry point |
-| --- | --- |
-| 1a. MuSc heatmaps | `third_party/MuSc/examples/musc_main.py` (`--dataset_name mvtec_xp`) |
-| 1b. CutLER × MuSc object bank | `third_party/CutLER/cutler/demo/demo.py --musc_dir ... --fusion_mode mul_blend_mul_v2 --coco_output ...` |
-| 2. Synthesis | `scripts/task_create_synthetic_dataset_object_bank.sh` |
-| 3. Oversegmentation | `granularity_divide_and_conquer/run_gra_dico_aug.sh <dataset> <stage>` |
-| 4. Label fusion | `pseudo_label_generate.py --fusion --fusion-overlap-thresh 0.95 ...` |
-| 5. Curriculum training | `sam2/training/train_curriculum_augmentation_restart_8.sh` |
-| 6. Evaluation | `scripts/task_test_augmentation_restart.sh` |
+```bash
+bash pipeline/01_object_bank.sh     # MuSc heatmaps + CutLER -> coco_cutler_musc.json   (1 GPU)
+bash pipeline/02_synthesize.sh      # easy / hard / extreme synthetic images            (CPU)
+bash pipeline/03_oversegment.sh     # oversegmentation pseudo-labels                    (GPUs)
+bash pipeline/04_pseudo_labels.sh   # class-agnostic labels + fusion                    (CPU)
+bash pipeline/05_train.sh           # curriculum training                               (8 GPUs)
+bash pipeline/06_evaluate.sh        # held-out DET-COMPASS; DATASET=CLCXray ... for cross-dataset
+```
 
-Synthesis stages:
+Synthesis stages (16 generation workers; output is identical for any worker count):
 
 | Stage | Images | Objects / image | Overlap `gamma` |
 | --- | ---: | --- | --- |
@@ -71,22 +90,35 @@ Synthesis stages:
 | hard | 8,000 | 4–7 | 0.0–0.3 |
 | extreme | 8,000 | 6–9 | 0.0–0.5 |
 
-Curriculum training (8 GPUs × batch size 2):
-
-| Stage | Samples | Base LR | Epochs |
-| --- | --- | --- | ---: |
-| easy | 0–4000 | 1.6e-4 | 80 |
-| hard | 0–6000 | 1.2e-4 | 64 |
-| extreme | 0–8000 | 1e-4 | 48 |
-
 Every synthetic image uses exactly one container from the DET-COMPASS
 `invisible` split. Objects are composed in the high/low-energy domain and the
 result is rendered with three fixed lookup tables
-(`xray_highlow_to_{colour,grey,density}_dict_RAW.pkl`) built from DET-COMPASS
-by `dependencies/det_compass_crops/create_{colour_dict_fast,grey_dict,density_dict}.py`.
-Each image draws from its own random stream derived from the base seed
-(default 40), the stage and the image id, so the output is byte-identical
-across runs and worker counts.
+(`xray_highlow_to_{colour,grey,density}_dict_RAW.pkl`, built by
+`python synthesis/build_luts.py all`). Each image draws from its own random
+stream derived from the base seed (default 40), the stage and the image id, so
+the output is byte-identical across runs and worker counts. See
+[synthesis/README.md](synthesis/README.md).
+
+Curriculum training (8 GPUs × batch size 2, initialized from SAM 2.1 Hiera-S;
+each stage starts from the previous stage's checkpoint):
+
+| Stage | Samples | Base LR | Vision LR argument | Epochs |
+| --- | --- | --- | --- | ---: |
+| easy | 0–4000 | 1.6e-4 | 4.8e-6 | 80 |
+| hard | 0–6000 | 1.2e-4 | 3.2e-6 | 64 |
+| extreme | 0–8000 | 1e-4 | 3e-6 | 48 |
+
+Evaluation uses the extreme-stage `checkpoint_48.pt`, granularities
+0.1–0.8 and mask threshold 0.5.
+
+## Ablations
+
+| Script | Ablation |
+| --- | --- |
+| `ablation/object_bank_cutler_only.sh` | CutLER-only object bank (`VARIANT=n1` or `n3`) |
+| `ablation/composition_rgb.sh` | RGB copy-paste instead of high/low-energy composition |
+| `ablation/extreme_difficulty.sh {00_07,00_09,9_12,12_15}` | harder final curriculum stage |
+| `ablation/label_source.sh {holistic,part}` | train on object masks only / oversegmentation only |
 
 ## License
 

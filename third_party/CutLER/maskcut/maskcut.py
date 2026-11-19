@@ -90,85 +90,61 @@ def build_sparse_laplacian(A):
 
 def fast_affinity_and_eigen(feats, tau, eps=1e-5):
     """
-    全GPU加速版本，但在返回前转换为numpy，
-    保证与原函数 get_affinity_matrix + second_smallest_eigenvector 的输出接口完全一致。
+    LAO-X: GPU version of get_affinity_matrix + second_smallest_eigenvector.
+    Results are converted to numpy so the outputs match the original interface.
     """
-    
-    # 1. 确保输入在 GPU 上
+
+    # Move the input to the GPU if available.
     if not isinstance(feats, torch.Tensor):
         feats = torch.from_numpy(feats)
     if not feats.is_cuda and torch.cuda.is_available():
         feats = feats.cuda()
-        
-    # --- Part 1: 计算 Affinity Matrix (对应 get_affinity_matrix) ---
-    
-    # 归一化 (L2 norm along dim 0)
+
+    # --- Part 1: affinity matrix (as in get_affinity_matrix) ---
+
+    # L2-normalise along dim 0; cosine similarity A_torch has shape [N, N].
     feats = F.normalize(feats, p=2, dim=0)
-    
-    # 矩阵乘法得到 Cosine Similarity
-    # A_torch 形状: [N, N]
-    A_torch = feats.t() @ feats 
-    
-    # 阈值处理 & 填充 eps
-    # 原逻辑：A = A > tau; A[A==0] = eps
-    # 这意味着大于 tau 的保留原值(其实是1/True? 原代码 A=A>tau 后 A变为了0/1矩阵)
-    # 修正分析原代码：
-    #   A = A > tau  -> 此时 A 是 bool/二值矩阵 (0 或 1)
-    #   A = np.where(..., eps, A) -> 0的地方填eps，1的地方保持1
-    #   这意味着 A 是一个近似全 1 的稠密矩阵（除了对角线和强相关区域是 1，背景是 eps）
-    
+    A_torch = feats.t() @ feats
+
+    # Binarise as in the original: A = A > tau, then zeros are replaced by eps,
+    # i.e. entries above tau become 1.0 and all others eps.
     mask = A_torch > tau
-    # 构造 float 类型的 A
-    # 满足原代码逻辑：大于 tau 的设为 1.0，否则设为 eps
-    A_final = torch.where(mask, 
-                          torch.tensor(1.0, device=feats.device, dtype=feats.dtype), 
+    A_final = torch.where(mask,
+                          torch.tensor(1.0, device=feats.device, dtype=feats.dtype),
                           torch.tensor(eps, device=feats.device, dtype=feats.dtype))
-    
-    # 计算度矩阵的对角线元素 d_i
+
+    # Diagonal of the degree matrix.
     d_i = torch.sum(A_final, dim=1)
-    
-    # --- Part 2: 求解特征向量 (对应 second_smallest_eigenvector) ---
-    
-    # 我们利用标准化拉普拉斯矩阵的性质来加速
-    # 目标：求解 (D - A)v = lambda * D * v 的第二小特征向量
-    # 等价于：求解 P = D^-0.5 * A * D^-0.5 的 **第二大** 特征向量 y
-    # 然后还原 v = D^-0.5 * y
-    
-    # 计算 D^-0.5
+
+    # --- Part 2: eigenvector (as in second_smallest_eigenvector) ---
+
+    # The second smallest generalised eigenvector of (D - A) v = lambda D v equals
+    # v = D^-0.5 y, where y is the eigenvector of the second LARGEST eigenvalue of
+    # the normalised affinity P = D^-0.5 A D^-0.5.
     D_inv_sqrt = torch.rsqrt(d_i) # rsqrt = 1 / sqrt(x)
-    
-    # 构建对称矩阵 P = D^-0.5 * A * D^-0.5
-    # 利用广播机制，避免构建巨大的对角矩阵，节省显存
+
+    # Build P by broadcasting instead of materialising diagonal matrices.
     P = A_final * D_inv_sqrt.unsqueeze(0) * D_inv_sqrt.unsqueeze(1)
-    
-    # 求解 P 的特征值和特征向量
-    # torch.linalg.eigh 针对对称矩阵优化，非常快
-    # 结果是按特征值 **升序** 排列的
-    # P 的最大特征值对应 (D-A) 的最小特征值(0)
-    # P 的第二大特征值对应 (D-A) 的第二小特征值 (我们需要这个)
+
+    # torch.linalg.eigh returns eigenvalues in ascending order (eigenvectors as
+    # columns), so the second largest one is column -2.
     vals, vecs = torch.linalg.eigh(P)
-    
-    # 取第二大特征值对应的向量 (倒数第二个)
-    # vecs 形状 [N, N], 列向量是特征向量
     y_second = vecs[:, -2]
-    
-    # 还原为广义特征向量 v = D^-0.5 * y
+
+    # Recover the generalised eigenvector v = D^-0.5 y.
     v_second = D_inv_sqrt * y_second
-    
-    # --- Part 3: 格式对齐与输出 ---
-    
-    # 1. 导出 Affinity Matrix 和 D (虽然计算特征向量没用到完整的 D 矩阵，但为了接口一致需返回)
-    # 注意：如果 N 很大，D = np.diag(d_i) 会非常消耗内存，建议仅返回 d_i 除非必须
+
+    # --- Part 3: outputs in the original format ---
+
+    # A and the full diagonal D are returned only for interface compatibility
+    # (np.diag(d_i) can be large for big N).
     A_np = A_final.cpu().numpy()
-    D_np = torch.diag(d_i).cpu().numpy() # 保持原代码返回完整对角矩阵的格式
-    
-    # 2. 导出特征向量
-    # 原代码返回了两次同一个向量 (copy 和 view)
+    D_np = torch.diag(d_i).cpu().numpy()
+
+    # As in the original, the same vector is returned twice (copy and view).
+    # Its sign is arbitrary (+v and -v are both solutions); the caller resolves it.
     result_vec = v_second.cpu().numpy()
-    
-    # 符号校正 (可选): 特征向量方向是随机的 (+v 或 -v 都是解)
-    # 为了尽量和 CPU 结果看起来像，可以强行规定第一个非零元素为正，但在数学上不影响聚类结果
-    
+
     eigenvec = np.copy(result_vec)
     second_smallest_vec = result_vec # View
     

@@ -5,8 +5,10 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 cd "${REPO_ROOT}"
 
+PYTHON="${PYTHON:-python}"
+LAOX_RESULTS_ROOT="${LAOX_RESULTS_ROOT:-${REPO_ROOT}/results}"
 COMMENT="${1:-}"
-TRAIN_ROOT="${2:-${TRAIN_ROOT:-results/train}}"
+TRAIN_ROOT="${2:-${TRAIN_ROOT:-${LAOX_RESULTS_ROOT}/train}}"
 CKPT_PATH_OVERRIDE="${3:-${CKPT_PATH:-}}"
 
 if [[ -n "${COMMENT}" && -d "${TRAIN_ROOT}/${COMMENT}" ]]; then
@@ -98,7 +100,7 @@ run_eval() {
 
   echo "[interactive_eval] dataset=${DATASET} stage=${STAGE} gra=${gra} sam_type=${SAM_TYPE} gpu=${gpu} ckpt=${CKPT_PATH}"
   CUDA_VISIBLE_DEVICES="${gpu}" \
-  python evaluation/interactive/xray_interactive_eval.py \
+  "${PYTHON}" evaluation/interactive/xray_interactive_eval.py \
     --dataset "${DATASET}" \
     --sam2-ckpt "${CKPT_PATH}" \
     --sam-type "${SAM_TYPE}" \

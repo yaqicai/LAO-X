@@ -1,119 +1,81 @@
 #!/usr/bin/env bash
+# Generate one LAO-X synthesis stage: split the images over parallel
+# generator processes, then merge their COCO shards into coco.json.
 set -euo pipefail
 
-export OMP_NUM_THREADS="${OMP_NUM_THREADS:-1}"
-export MKL_NUM_THREADS="${MKL_NUM_THREADS:-1}"
-export OPENBLAS_NUM_THREADS="${OPENBLAS_NUM_THREADS:-1}"
-export NUMEXPR_NUM_THREADS="${NUMEXPR_NUM_THREADS:-1}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+GENERATOR="${SCRIPT_DIR}/generate.py"
+PYTHON="${PYTHON:-python}"
+DATA_ROOT="${LAOX_DATA_ROOT:-${REPO_ROOT}/datasets}"
 
-REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-GENERATOR_ROOT="${GENERATOR_ROOT:-${REPO_ROOT}/dependencies/det_compass_crops}"
-GENERATOR="${GENERATOR_ROOT}/create_synthetic_dataset_musc.py"
-PYTHON_BIN="${PYTHON_BIN:-python}"
-
-WORKERS=16
-NUM_GENERATED=8000
+OBJECT_BANK_JSON=""
 STAGE=""
 NUM_OBJECTS=""
 GAMMA=""
-DATASET_ROOT="/path/to/datasets"
 DATASET_GEN=""
-OBJECT_BANK_JSON=""
+DATASET_ROOT="${DATA_ROOT}"
+WORKERS=16
+NUM_GENERATED=8000
 IO_WORKERS=2
-SEED="40"
+SEED=40
 OFFLINE=1
+TEST_COCO="${DATA_ROOT}/det_compass_xp/annotations/coco_agnostic.json"
+MATCHES_JSON="${DATA_ROOT}/det_compass_xp/annotations/huggingface_matches.json"
 COMPOSITION_MODE="xray"
-COLOR_MAP_MODE="legacy"
-COLOR_MAP_PALETTE="all"
-COLOR_MAP_JITTER="0.0"
-CONTAINER_COUNT_PROBS="1,0,0"
-TEST_COCO="/path/to/datasets/det_compass_xp/annotations/coco_agnostic.json"
-MATCHES_JSON="/path/to/datasets/det_compass_xp/annotations/huggingface_matches.json"
 
 usage() {
   cat <<'EOF'
 Usage:
-  task_create_synthetic_dataset_object_bank.sh \
-    --object-bank-json FILE --stage STAGE --num-objects MIN,MAX \
-    --gamma MIN,MAX --dataset-gen NAME [options]
+  run_stage.sh --object-bank-json FILE --stage STAGE --num-objects MIN,MAX \
+               --gamma MIN,MAX --dataset-gen NAME [options]
+
+Writes DATASET_ROOT/NAME/STAGE/{xray/*.png, coco_<start>_<end>.json, coco_train.json, coco.json}.
 
 Required:
-  --object-bank-json FILE  Exact COCO mask JSON used to build the object bank.
-  --stage STAGE            easy, hard, or extreme.
-  --num-objects MIN,MAX    Object-count range for each synthetic image.
-  --gamma MIN,MAX          Overlap range.
+  --object-bank-json FILE  Object-bank COCO mask JSON (e.g. coco_cutler_musc.json).
+  --stage STAGE            Stage name (easy, hard, extreme); part of every image seed.
+  --num-objects MIN,MAX    Objects per synthetic image.
+  --gamma MIN,MAX          Range of the maximum box IoU between placed objects.
   --dataset-gen NAME       Output dataset directory name.
 
 Options:
-  --workers N              Generation processes (default: 16).
-  --num-generated N        Images generated for this stage (default: 8000).
-  --dataset-root DIR       Output dataset parent (default: /path/to/datasets).
-  --io-workers N           Image writer threads per process (default: 2).
-  --seed N                 Fixed base seed (default: 40); image streams do not depend on worker count.
-  --online                 Allow HuggingFace downloads instead of cache-only mode.
-  --test-coco FILE         Labeled test COCO excluded from the object bank.
-  --matches-json FILE      Local-file to HuggingFace split/index mapping.
+  --dataset-root DIR       Output parent (default: ${LAOX_DATA_ROOT:-<repo>/datasets}).
+  --workers N              Generator processes (default: 16).
+  --num-generated N        Images in this stage (default: 8000).
+  --io-workers N           PNG writer threads per process (default: 2).
+  --seed N                 Base seed (default: 40); output does not depend on --workers.
+  --online                 Allow HuggingFace downloads (default: local cache only).
+  --test-coco FILE         Held-out labelled COCO excluded from the object bank
+                           (default: ${LAOX_DATA_ROOT}/det_compass_xp/annotations/coco_agnostic.json).
+  --matches-json FILE      Output of 'generate.py match'
+                           (default: ${LAOX_DATA_ROOT}/det_compass_xp/annotations/huggingface_matches.json).
+  --composition-mode MODE  xray (Beer-Lambert, default) or rgb (copy-paste ablation).
+
+Environment:
+  PYTHON         Python interpreter (default: python).
+  LAOX_DATA_ROOT Default data root (default: <repo>/datasets).
+  LAOX_LUT_DIR   Directory with the three lookup-table pickles (default: synthesis/luts).
 EOF
 }
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --object-bank-json)
-      OBJECT_BANK_JSON="$2"
-      shift 2
-      ;;
-    --workers)
-      WORKERS="$2"
-      shift 2
-      ;;
-    --num-generated)
-      NUM_GENERATED="$2"
-      shift 2
-      ;;
-    --stage)
-      STAGE="$2"
-      shift 2
-      ;;
-    --num-objects)
-      NUM_OBJECTS="$2"
-      shift 2
-      ;;
-    --gamma)
-      GAMMA="$2"
-      shift 2
-      ;;
-    --dataset-root)
-      DATASET_ROOT="$2"
-      shift 2
-      ;;
-    --dataset-gen)
-      DATASET_GEN="$2"
-      shift 2
-      ;;
-    --io-workers)
-      IO_WORKERS="$2"
-      shift 2
-      ;;
-    --seed)
-      SEED="$2"
-      shift 2
-      ;;
-    --online)
-      OFFLINE=0
-      shift
-      ;;
-    --test-coco)
-      TEST_COCO="$2"
-      shift 2
-      ;;
-    --matches-json)
-      MATCHES_JSON="$2"
-      shift 2
-      ;;
-    -h|--help)
-      usage
-      exit 0
-      ;;
+    --object-bank-json) OBJECT_BANK_JSON="$2"; shift 2 ;;
+    --stage)            STAGE="$2"; shift 2 ;;
+    --num-objects)      NUM_OBJECTS="$2"; shift 2 ;;
+    --gamma)            GAMMA="$2"; shift 2 ;;
+    --dataset-gen)      DATASET_GEN="$2"; shift 2 ;;
+    --dataset-root)     DATASET_ROOT="$2"; shift 2 ;;
+    --workers)          WORKERS="$2"; shift 2 ;;
+    --num-generated)    NUM_GENERATED="$2"; shift 2 ;;
+    --io-workers)       IO_WORKERS="$2"; shift 2 ;;
+    --seed)             SEED="$2"; shift 2 ;;
+    --online)           OFFLINE=0; shift ;;
+    --test-coco)        TEST_COCO="$2"; shift 2 ;;
+    --matches-json)     MATCHES_JSON="$2"; shift 2 ;;
+    --composition-mode) COMPOSITION_MODE="$2"; shift 2 ;;
+    -h|--help)          usage; exit 0 ;;
     *)
       echo "Unknown argument: $1" >&2
       usage >&2
@@ -137,32 +99,37 @@ for required_file in "${GENERATOR}" "${OBJECT_BANK_JSON}" "${TEST_COCO}" "${MATC
   fi
 done
 
-if (( WORKERS <= 0 || NUM_GENERATED <= 0 || IO_WORKERS <= 0 )); then
-  echo "workers, num-generated, and io-workers must be positive." >&2
-  exit 2
-fi
-
-# The generator forms the path as "${coco_dir}_${crop_ablation}.json".
-object_bank_stem="${OBJECT_BANK_JSON%.json}"
-if [[ "${object_bank_stem}" == "${OBJECT_BANK_JSON}" || "${object_bank_stem}" != *_* ]]; then
-  echo "Object-bank filename must be a .json name containing an underscore." >&2
-  exit 2
-fi
-COCO_DIR="${object_bank_stem%_*}"
-CROP_ABLATION="${object_bank_stem##*_}"
-
-stage_dir="${DATASET_ROOT%/}/${DATASET_GEN}/${STAGE}"
-if [[ -d "${stage_dir}" ]] && [[ -n "$(find "${stage_dir}" -mindepth 1 -maxdepth 1 -print -quit)" ]]; then
-  echo "Refusing to mix with an existing stage: ${stage_dir}/coco.json" >&2
-  exit 1
-fi
+for value_name in WORKERS NUM_GENERATED IO_WORKERS; do
+  if ! [[ "${!value_name}" =~ ^[0-9]+$ ]] || (( ${!value_name} <= 0 )); then
+    echo "${value_name} must be a positive integer." >&2
+    exit 2
+  fi
+done
 
 if ! [[ "${SEED}" =~ ^[0-9]+$ ]] || (( SEED > 4294967295 )); then
   echo "seed must be an unsigned 32-bit integer." >&2
   exit 2
 fi
+
+case "${COMPOSITION_MODE}" in
+  xray|rgb) ;;
+  *) echo "composition-mode must be xray or rgb." >&2; exit 2 ;;
+esac
+
+stage_dir="${DATASET_ROOT%/}/${DATASET_GEN}/${STAGE}"
+if [[ -d "${stage_dir}" ]] && [[ -n "$(find "${stage_dir}" -mindepth 1 -maxdepth 1 -print -quit)" ]]; then
+  echo "Refusing to write into a non-empty stage directory: ${stage_dir}" >&2
+  exit 1
+fi
+
 export PYTHONHASHSEED="${SEED}"
 export OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 NUMEXPR_NUM_THREADS=1
+
+if (( OFFLINE == 1 )); then
+  hf_mode=--offline
+else
+  hf_mode=--online
+fi
 
 per_worker=$((NUM_GENERATED / WORKERS))
 remainder=$((NUM_GENERATED % WORKERS))
@@ -178,37 +145,21 @@ for ((worker_id=0; worker_id<WORKERS; worker_id++)); do
     continue
   fi
 
-  common_args=(
-    --mode augment
-    --stage "${STAGE}"
-    --num_generated "${count}"
-    --start_id "${start_id}"
-    --num_objects "${NUM_OBJECTS}"
-    --gamma "${GAMMA}"
-    --dataset_root "${DATASET_ROOT}"
-    --dataset_gen "${DATASET_GEN}"
-    --io_workers "${IO_WORKERS}"
-    --composition_mode "${COMPOSITION_MODE}"
-    --coco_dir "${COCO_DIR}"
-    --crop_ablation "${CROP_ABLATION}"
-    --xray_test_anno_dir "${TEST_COCO}"
-    --matches_path "${MATCHES_JSON}"
-    --color_map_mode "${COLOR_MAP_MODE}"
-    --color_map_palette "${COLOR_MAP_PALETTE}"
-    --color_map_jitter "${COLOR_MAP_JITTER}"
-    --container_count_probs "${CONTAINER_COUNT_PROBS}"
-  )
-  if [[ -n "${SEED}" ]]; then
-    common_args+=(--seed "${SEED}")
-  fi
-  if (( OFFLINE == 1 )); then
-    common_args+=(--offline)
-  else
-    common_args+=(--online)
-  fi
-
   echo "[gen] worker=${worker_id} start_id=${start_id} count=${count} object_bank=${OBJECT_BANK_JSON}"
-  "${PYTHON_BIN}" "${GENERATOR}" "${common_args[@]}" &
+  "${PYTHON}" "${GENERATOR}" augment \
+    --object-bank-json "${OBJECT_BANK_JSON}" \
+    --test-coco "${TEST_COCO}" \
+    --matches-json "${MATCHES_JSON}" \
+    --output-dir "${stage_dir}" \
+    --stage "${STAGE}" \
+    --num-generated "${count}" \
+    --start-id "${start_id}" \
+    --num-objects "${NUM_OBJECTS}" \
+    --gamma "${GAMMA}" \
+    --composition-mode "${COMPOSITION_MODE}" \
+    --seed "${SEED}" \
+    --io-workers "${IO_WORKERS}" \
+    "${hf_mode}" &
   pids+=("$!")
   start_id=$((start_id + count))
 done
@@ -224,12 +175,9 @@ if (( failed != 0 )); then
   exit 1
 fi
 
-"${PYTHON_BIN}" "${GENERATOR}" \
-  --mode merge \
-  --stage "${STAGE}" \
-  --dataset_root "${DATASET_ROOT}" \
-  --dataset_gen "${DATASET_GEN}" \
-  --merge_pattern 'coco_[0-9]*_[0-9]*.json' \
-  --merge_output coco.json
+"${PYTHON}" "${GENERATOR}" merge \
+  --output-dir "${stage_dir}" \
+  --pattern 'coco_[0-9]*_[0-9]*.json' \
+  --output coco.json
 
 echo "Synthetic stage ready: ${stage_dir}"

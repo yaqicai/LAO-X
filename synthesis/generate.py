@@ -1,4 +1,26 @@
+# Derived from DET-COMPASS-CROPS by Lorenzo Vaquero (used with permission);
+# modified for LAO-X.
+"""LAO-X X-ray synthesis.
+
+Subcommands
+-----------
+match    Map local DET-COMPASS X-ray files to HuggingFace (split, index)
+         entries by pixel hash; writes the matches JSON used below.
+augment  Generate one shard of a synthesis stage: objects from the object
+         bank are composed (Beer-Lambert in the high/low-energy domain, or
+         copy-paste with --composition-mode rgb) onto exactly one container
+         from the DET-COMPASS 'invisible' split, and the result is rendered
+         with the fixed DET-COMPASS lookup tables. Writes xray/<id>.png and
+         coco_<start>_<end>.json (and coco_train.json for the shard with
+         --start-id 0).
+merge    Merge the coco_<start>_<end>.json shards of a stage into coco.json.
+
+Every image draws from its own random stream derived from (seed, stage,
+image id), so the output does not depend on how images are split into shards.
+Use run_stage.sh to generate a full stage.
+"""
 import argparse
+import glob
 import hashlib
 import json
 import os
@@ -6,18 +28,16 @@ import random
 import time
 from collections import deque
 from concurrent.futures import ThreadPoolExecutor
-import glob
-from typing import Dict, List, Optional, Tuple
+from contextlib import contextmanager
+from typing import Dict, List, Tuple
 
 import cv2
-import matplotlib.pyplot as plt
 import numpy as np
 from datasets import Dataset, DatasetDict, concatenate_datasets, load_dataset
+from datasets import config as hf_datasets_config
 from PIL import Image
 from pycocotools import mask as mask_utils
 from tqdm import tqdm
-import fcntl
-from contextlib import contextmanager
 
 from compass_editor.colour import (
     center_pad_unpad,
@@ -31,517 +51,38 @@ from compass_editor.colour import (
 from compass_editor.dataset import set_seed, transform_xray_crops
 
 
-os.environ["HF_HOME"] = "/path/to/laox_repro/hf_cache"
-os.environ["HF_DATASETS_CACHE"] = "/path/to/laox_repro/hf_cache/datasets"
-os.environ["HUGGINGFACE_HUB_CACHE"] = "/path/to/laox_repro/hf_cache/hub"
-
-
+HF_DATASET = "PAGF/DET-COMPASS"
 IMG_EXTS = {".png", ".jpg", ".jpeg", ".bmp", ".tif", ".tiff"}
 
-
-COLOR_MAP_PALETTES = {
-    # kept from previous sets
-    "ivory_teal_crimson": ((232, 220, 172), (70, 176, 176), (196, 62, 78)),
-    "silver_blue_emerald": ((206, 206, 192), (92, 146, 228), (64, 168, 114)),
-    "lavender_gold_navy": ((194, 170, 220), (224, 178, 88), (52, 78, 148)),
-    "clcxray_g2": ((234, 226, 184), (98, 190, 188), (40, 120, 210)),
-    "dvxray_g3": ((246, 240, 226), (206, 212, 228), (138, 156, 206)),
-    "hixray_g2": ((246, 226, 158), (220, 178, 112), (156, 98, 74)),
-
-    # new designs inspired by legacy readability (light low-density, clear mid/high separation)
-    "legacyplus_honey_mint_cobalt": ((246, 228, 170), (142, 206, 154), (44, 116, 216)),
-    "legacyplus_sand_cyan_blue": ((238, 220, 176), (126, 202, 210), (36, 114, 206)),
-    "legacyplus_pearl_lime_navy": ((236, 232, 198), (156, 206, 122), (54, 90, 170)),
-    "legacyplus_amber_aqua_indigo": ((244, 214, 150), (116, 194, 198), (72, 86, 188)),
-    "legacyplus_blush_teal_royal": ((244, 224, 210), (108, 188, 180), (50, 108, 214)),
-
-    # white-zero modes: density==0 pure white, then smoothly transition to light low-density colours
-    "whitezero_amber_teal_blue": ((250, 238, 196), (144, 204, 182), (48, 120, 214)),
-    "whitezero_peach_mint_navy": ((250, 234, 214), (154, 206, 176), (58, 96, 182)),
-    "whitezero_cream_cyan_violet": ((246, 240, 222), (150, 202, 220), (116, 88, 186)),
-
-    # fully new 2D-focused schemes (material ratio controls warm/cool branch)
-    "twod_graphite_coral_teal": ((244, 236, 222), (124, 182, 176), (52, 108, 124)),
-    "twod_sand_violet_cyan": ((246, 232, 206), (156, 124, 198), (74, 184, 210)),
-    "twod_ice_amber_ink": ((242, 246, 250), (214, 168, 106), (58, 78, 116)),
-}
-
-
-COLOR_MAP_LUMA_RANGE = {
-    "ivory_teal_crimson": (224.0, 76.0),
-    "silver_blue_emerald": (214.0, 70.0),
-    "lavender_gold_navy": (210.0, 60.0),
-    "clcxray_g2": (242.0, 66.0),
-    "dvxray_g3": (244.0, 86.0),
-    "hixray_g2": (234.0, 52.0),
-    "legacyplus_honey_mint_cobalt": (236.0, 64.0),
-    "legacyplus_sand_cyan_blue": (234.0, 66.0),
-    "legacyplus_pearl_lime_navy": (238.0, 62.0),
-    "legacyplus_amber_aqua_indigo": (232.0, 60.0),
-    "legacyplus_blush_teal_royal": (236.0, 63.0),
-    "whitezero_amber_teal_blue": (240.0, 68.0),
-    "whitezero_peach_mint_navy": (240.0, 64.0),
-    "whitezero_cream_cyan_violet": (242.0, 62.0),
-    "twod_graphite_coral_teal": (238.0, 58.0),
-    "twod_sand_violet_cyan": (236.0, 60.0),
-    "twod_ice_amber_ink": (244.0, 56.0),
-}
-
-
-COLOR_MAP_PROFILE_PALETTES = {
-    "kept": (
-        "clcxray_g2",
-        "dvxray_g3",
-        "hixray_g2",
-        "ivory_teal_crimson",
-        "lavender_gold_navy",
-        "silver_blue_emerald",
-    ),
-    "legacyplus": (
-        "legacyplus_honey_mint_cobalt",
-        "legacyplus_sand_cyan_blue",
-        "legacyplus_pearl_lime_navy",
-        "legacyplus_amber_aqua_indigo",
-        "legacyplus_blush_teal_royal",
-    ),
-    "whitezero": (
-        "whitezero_amber_teal_blue",
-        "whitezero_peach_mint_navy",
-        "whitezero_cream_cyan_violet",
-    ),
-    "twod_new": (
-        "twod_graphite_coral_teal",
-        "twod_sand_violet_cyan",
-        "twod_ice_amber_ink",
-    ),
-}
-
-
-WHITE_ZERO_DENSITY_PALETTES = set(COLOR_MAP_PROFILE_PALETTES["whitezero"])
-
-
-def _ordered_unique(values: List[str]) -> Tuple[str, ...]:
-    seen = set()
-    out: List[str] = []
-    for v in values:
-        if v not in seen:
-            out.append(v)
-            seen.add(v)
-    return tuple(out)
-
-
-ALL_DENSITY_PALETTES = _ordered_unique(
-    [
-        *COLOR_MAP_PROFILE_PALETTES["kept"],
-        *COLOR_MAP_PROFILE_PALETTES["legacyplus"],
-        *COLOR_MAP_PROFILE_PALETTES["whitezero"],
-        *COLOR_MAP_PROFILE_PALETTES["twod_new"],
-    ]
-)
-
-
-def parse_palette_list(s: str) -> Tuple[str, ...]:
-    """
-    Parse comma-separated palette keys.
-    Supports direct keys, profile names, and "all".
-    """
-    parts = tuple(p.strip().lower() for p in s.split(",") if p.strip())
-    if not parts:
-        raise argparse.ArgumentTypeError(
-            "Palette list cannot be empty. Use values like 'all', 'legacyplus', or 'twod_new'."
-        )
-
-    expanded: List[str] = []
-    invalid: List[str] = []
-
-    for token in parts:
-        if token in {"all", "*"}:
-            expanded.extend(ALL_DENSITY_PALETTES)
-        elif token in COLOR_MAP_PROFILE_PALETTES:
-            expanded.extend(COLOR_MAP_PROFILE_PALETTES[token])
-        elif token in COLOR_MAP_PALETTES:
-            expanded.append(token)
-        else:
-            invalid.append(token)
-
-    if invalid:
-        raise argparse.ArgumentTypeError(
-            "Unknown palette/profile token(s): "
-            f"{invalid}. Valid keys: {sorted(COLOR_MAP_PALETTES.keys())}; "
-            f"profiles: {sorted(COLOR_MAP_PROFILE_PALETTES.keys()) + ['all']}"
-        )
-
-    return _ordered_unique(expanded)
-
-
-def _normalize_by_percentile(arr: np.ndarray, q_low: float, q_high: float) -> np.ndarray:
-    lo, hi = np.percentile(arr, [q_low, q_high])
-    if hi - lo < 1e-9:
-        return np.zeros_like(arr, dtype=np.float32)
-    return np.clip((arr - lo) / (hi - lo), 0.0, 1.0).astype(np.float32)
-
-
-def _jitter_colour(colour: Tuple[int, int, int], jitter: float, rng: np.random.Generator) -> np.ndarray:
-    c = np.array(colour, dtype=np.float32)
-    if jitter <= 0:
-        return c
-    delta = rng.uniform(-jitter, jitter, size=3).astype(np.float32)
-    return np.clip(c + delta, 0.0, 255.0)
-
-
-def _colourize_density_with_triplet(
-    density_norm: np.ndarray,
-    low_rgb: np.ndarray,
-    mid_rgb: np.ndarray,
-    high_rgb: np.ndarray,
-) -> np.ndarray:
-    t = np.clip(density_norm, 0.0, 1.0).astype(np.float32)
-    out = np.empty((t.shape[0], t.shape[1], 3), dtype=np.float32)
-
-    low_to_mid = t <= 0.5
-    a = (t[low_to_mid] * 2.0)[:, None]
-    out[low_to_mid] = (1.0 - a) * low_rgb + a * mid_rgb
-
-    mid_to_high = ~low_to_mid
-    b = ((t[mid_to_high] - 0.5) * 2.0)[:, None]
-    out[mid_to_high] = (1.0 - b) * mid_rgb + b * high_rgb
-
-    return np.clip(out, 0.0, 255.0).astype(np.uint8)
-
-
-def _compute_density_features(high_low: np.ndarray):
-    density_img = highlow_to_density(high_low).astype(np.uint8)
-
-    density_base = _normalize_by_percentile(density_img.astype(np.float32), 1.0, 99.0)
-    clahe = cv2.createCLAHE(clipLimit=2.5, tileGridSize=(8, 8))
-    density_local = clahe.apply(density_img)
-    density_local_norm = _normalize_by_percentile(density_local.astype(np.float32), 1.0, 99.0)
-
-    high = high_low[..., 0].astype(np.float32)
-    low = high_low[..., 1].astype(np.float32)
-    detail_raw = 255.0 - 0.5 * (high + low)
-    detail_norm = _normalize_by_percentile(detail_raw, 1.0, 99.0)
-
-    density_norm = np.clip(
-        0.62 * density_base + 0.26 * density_local_norm + 0.12 * detail_norm,
-        0.0,
-        1.0,
-    )
-
-    ratio_raw = (low - high) / np.maximum(low + high, 1e-3)
-    ratio_center = float(np.median(ratio_raw))
-    ratio_dev = ratio_raw - ratio_center
-    ratio_scale = float(np.percentile(np.abs(ratio_dev), 97.0))
-    ratio_scale = max(ratio_scale, 1e-4)
-    ratio_norm = np.clip(ratio_dev / ratio_scale, -1.0, 1.0).astype(np.float32)
-
-    return density_img, density_norm.astype(np.float32), detail_norm, high, low, ratio_norm
-
-
-def _get_2d_palette_spec(
-    palette_key: str,
-    low_rgb: np.ndarray,
-    mid_rgb: np.ndarray,
-    high_rgb: np.ndarray,
-):
-    # Generic 2D branch: density controls low-mid-high; energy-ratio controls warm/cool split.
-    warm_rgb = np.clip(0.64 * low_rgb + 0.36 * mid_rgb, 0.0, 255.0)
-    cool_rgb = np.clip(0.22 * mid_rgb + 0.78 * high_rgb, 0.0, 255.0)
-    spec = {
-        "warm_rgb": warm_rgb,
-        "cool_rgb": cool_rgb,
-        "alpha_min": 0.16,
-        "alpha_max": 0.86,
-        "density_start": 0.16,
-        "ratio_power": 0.92,
-        "legacy_keep": 0.28,
-    }
-
-    # Whitezero: keep tray/background close to legacy while recoloring object internals.
-    if palette_key in WHITE_ZERO_DENSITY_PALETTES:
-        spec.update(
-            {
-                "alpha_min": 0.08,
-                "alpha_max": 0.80,
-                "density_start": 0.22,
-                "ratio_power": 0.90,
-                "legacy_keep": 0.44,
-            }
-        )
-
-    # Fully redesigned 2D schemes with explicit warm/cool anchors.
-    if palette_key == "twod_graphite_coral_teal":
-        spec.update(
-            {
-                "warm_rgb": np.array((224.0, 146.0, 118.0), dtype=np.float32),
-                "cool_rgb": np.array((64.0, 168.0, 172.0), dtype=np.float32),
-                "alpha_min": 0.20,
-                "alpha_max": 0.92,
-                "density_start": 0.12,
-                "ratio_power": 0.86,
-                "legacy_keep": 0.22,
-            }
-        )
-    elif palette_key == "twod_sand_violet_cyan":
-        spec.update(
-            {
-                "warm_rgb": np.array((214.0, 166.0, 106.0), dtype=np.float32),
-                "cool_rgb": np.array((86.0, 190.0, 214.0), dtype=np.float32),
-                "alpha_min": 0.18,
-                "alpha_max": 0.90,
-                "density_start": 0.14,
-                "ratio_power": 0.84,
-                "legacy_keep": 0.20,
-            }
-        )
-    elif palette_key == "twod_ice_amber_ink":
-        spec.update(
-            {
-                "warm_rgb": np.array((226.0, 170.0, 88.0), dtype=np.float32),
-                "cool_rgb": np.array((62.0, 86.0, 130.0), dtype=np.float32),
-                "alpha_min": 0.22,
-                "alpha_max": 0.94,
-                "density_start": 0.10,
-                "ratio_power": 0.82,
-                "legacy_keep": 0.16,
-            }
-        )
-
-    return spec
-
-
-def highlow_to_colour_density_palette_2d(
-    high_low_img: np.ndarray,
-    palette_key: str,
-    jitter: float,
-    rng: np.random.Generator,
-) -> Tuple[np.ndarray, np.ndarray]:
-    """
-    2D color mapping: density controls depth branch, high/low ratio controls material branch.
-    Preserves legacy structural readability while giving stronger cross-domain color variation.
-    """
-    high_low = np.asarray(high_low_img, dtype=np.uint8)
-    density_img, density_norm, detail_norm, high, low, ratio_norm = _compute_density_features(high_low)
-    density_gamma = float(rng.uniform(0.97, 1.03))
-    density_norm = np.power(density_norm, density_gamma).astype(np.float32)
-
-    # 2D low-density axis: rely more on physical attenuation than on compressed density LUT bins.
-    atten_raw = 255.0 - 0.5 * (high + low)
-    atten_norm = _normalize_by_percentile(atten_raw, 0.5, 99.5)
-    density_2d = np.clip(
-        0.28 * density_norm + 0.58 * atten_norm + 0.14 * detail_norm,
-        0.0,
-        1.0,
-    ).astype(np.float32)
-
-    low_ref, mid_ref, high_ref = COLOR_MAP_PALETTES[palette_key]
-    low_rgb = _jitter_colour(low_ref, jitter * 0.30, rng)
-    mid_rgb = _jitter_colour(mid_ref, jitter * 0.30, rng)
-    high_rgb = _jitter_colour(high_ref, jitter * 0.30, rng)
-
-    base_img = _colourize_density_with_triplet(density_2d, low_rgb, mid_rgb, high_rgb).astype(np.float32)
-
-    spec = _get_2d_palette_spec(palette_key, low_rgb, mid_rgb, high_rgb)
-    ratio_shaped = np.sign(ratio_norm) * (np.abs(ratio_norm) ** float(spec["ratio_power"]))
-    ratio_pos = np.clip(ratio_shaped, 0.0, 1.0)
-    ratio_neg = np.clip(-ratio_shaped, 0.0, 1.0)
-
-    mat_img = base_img.copy()
-    mat_img = (1.0 - ratio_pos[..., None]) * mat_img + ratio_pos[..., None] * spec["cool_rgb"]
-    mat_img = (1.0 - ratio_neg[..., None]) * mat_img + ratio_neg[..., None] * spec["warm_rgb"]
-
-    low_luma, high_luma = COLOR_MAP_LUMA_RANGE[palette_key]
-    target_luma = low_luma * (1.0 - density_2d) + high_luma * density_2d
-
-    # Enforce stronger separation between air(0-ish) and tray(low density) in 2D mode.
-    low_band = np.clip((density_2d - 0.07) / 0.18, 0.0, 1.0)
-    low_separation = low_band * (1.0 - np.clip((density_2d - 0.30) / 0.22, 0.0, 1.0))
-    sep_strength = 34.0 if palette_key.startswith("twod_") else 26.0
-    target_luma = target_luma - sep_strength * low_separation
-    cur_luma = (
-        0.2126 * mat_img[..., 0]
-        + 0.7152 * mat_img[..., 1]
-        + 0.0722 * mat_img[..., 2]
-    )
-    luma_scale = np.clip(target_luma / np.maximum(cur_luma, 1e-3), 0.72, 1.55)
-    mat_img = mat_img * luma_scale[..., None]
-
-    detail_gain = 0.90 + 0.20 * detail_norm
-    mat_img = mat_img * detail_gain[..., None]
-
-    # Density-dependent recolor strength: weak at low density, strong at medium/high density.
-    density_gate = np.clip(
-        (density_2d - float(spec["density_start"])) / max(1.0 - float(spec["density_start"]), 1e-3),
-        0.0,
-        1.0,
-    )
-    recolor_alpha = float(spec["alpha_min"]) + (float(spec["alpha_max"]) - float(spec["alpha_min"])) * density_gate
-
-    # Keep legacy texture cues so tray/inner structure remain readable.
-    legacy_img = highlow_to_colour(high_low).astype(np.float32)
-    legacy_keep = float(spec["legacy_keep"])
-    recolor_alpha = recolor_alpha * (1.0 - legacy_keep)
-    colour_img = (1.0 - recolor_alpha[..., None]) * legacy_img + recolor_alpha[..., None] * mat_img
-
-    # Global air anchor: keep true background near white in all 2D palettes.
-    air_from_density = np.clip((0.09 - density_2d) / 0.09, 0.0, 1.0)
-    air_from_signal = np.clip((np.minimum(high, low) - 248.0) / 7.0, 0.0, 1.0)
-    air_whiten = np.maximum(air_from_density, 0.90 * air_from_signal)
-    white = np.full_like(colour_img, 255.0)
-    colour_img = (1.0 - air_whiten[..., None]) * colour_img + air_whiten[..., None] * white
-
-    # For whitezero family, keep 0-density / near-air pixels even closer to white.
-    if palette_key in WHITE_ZERO_DENSITY_PALETTES:
-        near_zero = np.clip((0.12 - density_2d) / 0.12, 0.0, 1.0)
-        air_whiten = np.clip((np.minimum(high, low) - 246.0) / 9.0, 0.0, 1.0)
-        whiten = np.maximum(near_zero, air_whiten)
-        white = np.full_like(colour_img, 255.0)
-        colour_img = (1.0 - whiten[..., None]) * colour_img + whiten[..., None] * white
-        pure_white_mask = (high >= 251.0) & (low >= 251.0)
-        if np.any(pure_white_mask):
-            colour_img[pure_white_mask] = 255.0
-
-    colour_img = np.clip(colour_img, 0.0, 255.0).astype(np.uint8)
-    return colour_img, density_img
-
-
-def highlow_to_colour_density_palette(
-    high_low_img: np.ndarray,
-    palette_key: str,
-    jitter: float,
-    rng: np.random.Generator,
-) -> Tuple[np.ndarray, np.ndarray]:
-    """
-    Density-driven pseudo colorization with explicit luminance control and edge-preserving detail.
-    Returns color image and original density image.
-    """
-    high_low = np.asarray(high_low_img, dtype=np.uint8)
-    density_img = highlow_to_density(high_low).astype(np.uint8)
-
-    # 1) Global + local density normalization.
-    density_base = _normalize_by_percentile(density_img.astype(np.float32), 1.0, 99.0)
-    clahe = cv2.createCLAHE(clipLimit=2.5, tileGridSize=(8, 8))
-    density_local = clahe.apply(density_img)
-    density_local_norm = _normalize_by_percentile(density_local.astype(np.float32), 1.0, 99.0)
-
-    # 2) Structure proxy from high/low channels.
-    high = high_low[..., 0].astype(np.float32)
-    low = high_low[..., 1].astype(np.float32)
-    detail_raw = 255.0 - 0.5 * (high + low)
-    detail_norm = _normalize_by_percentile(detail_raw, 1.0, 99.0)
-
-    density_norm = np.clip(
-        0.62 * density_base + 0.26 * density_local_norm + 0.12 * detail_norm,
-        0.0,
-        1.0,
-    )
-    density_gamma = float(rng.uniform(0.97, 1.03))
-    density_norm = np.power(density_norm, density_gamma)
-
-    low_ref, mid_ref, high_ref = COLOR_MAP_PALETTES[palette_key]
-    low_rgb = _jitter_colour(low_ref, jitter * 0.30, rng)
-    mid_rgb = _jitter_colour(mid_ref, jitter * 0.30, rng)
-    high_rgb = _jitter_colour(high_ref, jitter * 0.30, rng)
-
-    colour_img = _colourize_density_with_triplet(density_norm, low_rgb, mid_rgb, high_rgb).astype(np.float32)
-
-    # 3) Force luminance ordering: low density brighter, high density darker.
-    low_luma, high_luma = COLOR_MAP_LUMA_RANGE[palette_key]
-    target_luma = low_luma * (1.0 - density_norm) + high_luma * density_norm
-    cur_luma = (
-        0.2126 * colour_img[..., 0]
-        + 0.7152 * colour_img[..., 1]
-        + 0.0722 * colour_img[..., 2]
-    )
-    scale = np.clip(target_luma / np.maximum(cur_luma, 1e-3), 0.72, 1.55)
-    colour_img = colour_img * scale[..., None]
-
-    # 4) Gentle detail modulation without darkening flat background.
-    detail_gain = 0.92 + 0.16 * detail_norm
-    colour_img = colour_img * detail_gain[..., None]
-
-    # White-zero palettes: legacy-anchored rendering.
-    # Keep legacy structure/texture in low density, recolor mainly mid/high densities.
-    if palette_key in WHITE_ZERO_DENSITY_PALETTES:
-        legacy_img = highlow_to_colour(high_low).astype(np.float32)
-        legacy_luma = (
-            0.2126 * legacy_img[..., 0]
-            + 0.7152 * legacy_img[..., 1]
-            + 0.0722 * legacy_img[..., 2]
-        )
-
-        # Keep low-density close to legacy, push colour change into medium/high densities.
-        recolor_alpha = np.clip((density_norm - 0.28) / 0.56, 0.0, 1.0)
-        recolor_alpha = np.power(recolor_alpha, 0.85)
-
-        # Preserve legacy local luminance cues (tray structure, edges),
-        # while injecting controlled depth contrast for higher density.
-        desired_luma = low_luma * (1.0 - density_norm) + high_luma * density_norm
-        mixed_luma = 0.82 * legacy_luma + 0.18 * desired_luma
-        cur_palette_luma = (
-            0.2126 * colour_img[..., 0]
-            + 0.7152 * colour_img[..., 1]
-            + 0.0722 * colour_img[..., 2]
-        )
-        palette_scale = np.clip(mixed_luma / np.maximum(cur_palette_luma, 1e-3), 0.76, 1.42)
-        palette_img = colour_img * palette_scale[..., None]
-
-        colour_img = (1.0 - recolor_alpha[..., None]) * legacy_img + recolor_alpha[..., None] * palette_img
-
-    colour_img = np.clip(colour_img, 0.0, 255.0)
-
-    colour_img = colour_img.astype(np.uint8)
-    return colour_img, density_img
-
-
-def _create_xray_outputs(
-    composite_img: np.ndarray,
-    color_map_mode: str,
-    color_map_palette: Tuple[str, ...],
-    color_map_jitter: float,
-    color_map_seed: Optional[int],
-    sample_id: Optional[int],
-) -> Tuple[np.ndarray, np.ndarray, Image.Image, Image.Image, np.ndarray]:
-    if color_map_mode != "legacy":
-        raise ValueError("Only the fixed legacy High/Low LUT is permitted.")
-    composite_img = composite_img[..., :2]
-
-    if color_map_mode == "legacy":
-        xray_colour = highlow_to_colour(composite_img)
-        xray_density = highlow_to_density(composite_img)
-    elif color_map_mode in {"density_palette", "density_palette_2d"}:
-        base_seed = 0 if color_map_seed is None else int(color_map_seed)
-        sample_offset = 0 if sample_id is None else int(sample_id)
-        rng = np.random.default_rng(base_seed + sample_offset)
-        palette_key = color_map_palette[int(rng.integers(0, len(color_map_palette)))]
-        if color_map_mode == "density_palette_2d":
-            xray_colour, xray_density = highlow_to_colour_density_palette_2d(
-                composite_img,
-                palette_key=palette_key,
-                jitter=color_map_jitter,
-                rng=rng,
-            )
-        else:
-            xray_colour, xray_density = highlow_to_colour_density_palette(
-                composite_img,
-                palette_key=palette_key,
-                jitter=color_map_jitter,
-                rng=rng,
-            )
-    else:
-        raise ValueError(f"Unknown color_map_mode '{color_map_mode}'")
-
-    xray_grey = highlow_to_grey(composite_img)
-    xray_high = Image.fromarray(composite_img[..., 0], mode="L")
-    xray_low = Image.fromarray(composite_img[..., 1], mode="L")
-
-    return xray_colour, xray_grey, xray_high, xray_low, xray_density
+# Container canvas (height, width) and object transformation limits.
+IMAGE_SIZE = (580, 880)
+MAX_ANGLE = 180.0
+MAX_SCALE = 1.2
+MAX_TRANSLATION = 0.75
+PLACEMENT_TRIES = 50
+
+# Namespace of the per-image seed; changing it changes every generated image.
+SEED_NAMESPACE = "laox-single-legacy-v1"
+
+
+# ---------------------------------------------------------------------------
+# DET-COMPASS loading
+# ---------------------------------------------------------------------------
+
+def _hf_datasets_cache_root() -> str:
+    """HuggingFace datasets cache (honours HF_DATASETS_CACHE / HF_HOME)."""
+    return str(hf_datasets_config.HF_DATASETS_CACHE)
 
 
 def _load_det_compass_dataset_from_cache() -> DatasetDict:
-    cache_root = os.environ.get(
-        "HF_DATASETS_CACHE", "/path/to/laox_repro/hf_cache/datasets"
-    )
+    """Load the 'test' and 'invisible' splits straight from cached Arrow shards.
+
+    Looks for <cache>/*___det-compass/<config>/<version>/<revision>/ directories
+    that hold dataset_info.json and *-test-*.arrow shards (both the standard
+    HuggingFace layout and a local reconstruction of it); the most recently
+    modified one is used.
+    """
+    cache_root = _hf_datasets_cache_root()
     candidates = []
     for cache_dir in glob.glob(
         os.path.join(cache_root, "*___det-compass", "*", "*", "*")
@@ -553,8 +94,8 @@ def _load_det_compass_dataset_from_cache() -> DatasetDict:
 
     if not candidates:
         raise FileNotFoundError(
-            "No complete cached PAGF/DET-COMPASS dataset was found under "
-            f"{cache_root}. Run once with network access before using --offline."
+            f"No complete cached {HF_DATASET} dataset was found under "
+            f"{cache_root}. Run once with --online (network access) first."
         )
 
     cache_dir = max(candidates, key=os.path.getmtime)
@@ -572,19 +113,19 @@ def _load_det_compass_dataset_from_cache() -> DatasetDict:
 
     if "test" not in splits:
         raise FileNotFoundError(
-            f"Cached PAGF/DET-COMPASS test split is missing from {cache_dir}."
+            f"Cached {HF_DATASET} test split is missing from {cache_dir}."
         )
-    print(f"Loading PAGF/DET-COMPASS directly from cache: {cache_dir}")
+    print(f"Loading {HF_DATASET} directly from cache: {cache_dir}")
     return DatasetDict(splits)
 
 
-def _load_det_compass_dataset(offline: bool = False):
+def _load_det_compass_dataset(offline: bool):
     if offline:
         os.environ["HF_DATASETS_OFFLINE"] = "1"
         os.environ["HF_HUB_OFFLINE"] = "1"
         return _load_det_compass_dataset_from_cache()
     with _dataset_lock():
-        return load_dataset("PAGF/DET-COMPASS", download_mode="reuse_cache_if_exists")
+        return load_dataset(HF_DATASET, download_mode="reuse_cache_if_exists")
 
 
 @contextmanager
@@ -592,10 +133,9 @@ def _dataset_lock(timeout_s: int = 1800):
     """
     Serialize HuggingFace dataset preparation to avoid concurrent .incomplete writes.
     """
-    lock_path = os.environ.get(
-        "DET_COMPASS_DATASET_LOCK",
-        "/path/to/laox_repro/hf_cache/datasets/.det_compass_lock",
-    )
+    import fcntl
+
+    lock_path = os.path.join(_hf_datasets_cache_root(), ".det_compass_lock")
     os.makedirs(os.path.dirname(lock_path), exist_ok=True)
     start = time.time()
     with open(lock_path, "w") as f:
@@ -614,6 +154,10 @@ def _dataset_lock(timeout_s: int = 1800):
         finally:
             fcntl.flock(f, fcntl.LOCK_UN)
 
+
+# ---------------------------------------------------------------------------
+# Argument parsing helpers
+# ---------------------------------------------------------------------------
 
 def parse_range_float(s: str) -> Tuple[float, float]:
     """
@@ -649,12 +193,9 @@ def parse_range_int(s: str) -> Tuple[int, int]:
         ) from exc
 
 
-def parse_container_count_probs(s: str) -> Tuple[float, float, float]:
-    parts = tuple(float(v.strip()) for v in s.split(","))
-    if parts != (1.0, 0.0, 0.0):
-        raise argparse.ArgumentTypeError("This reproduction permits exactly one container: 1,0,0.")
-    return parts
-
+# ---------------------------------------------------------------------------
+# Small array / COCO helpers
+# ---------------------------------------------------------------------------
 
 def _ensure_mask_size(mask: np.ndarray, height: int, width: int) -> np.ndarray:
     if mask is None:
@@ -666,14 +207,6 @@ def _ensure_mask_size(mask: np.ndarray, height: int, width: int) -> np.ndarray:
     out = np.zeros((height, width), dtype=mask.dtype)
     out[:h, :w] = mask[:h, :w]
     return out
-
-
-def _crop_arrays_to_min_size(*arrays: np.ndarray) -> List[np.ndarray]:
-    heights = [arr.shape[0] for arr in arrays]
-    widths = [arr.shape[1] for arr in arrays]
-    height = min(heights)
-    width = min(widths)
-    return [arr[:height, :width] for arr in arrays]
 
 
 def _decode_mask(segmentation, height: int, width: int) -> np.ndarray:
@@ -728,6 +261,10 @@ def _load_image_as_rgb_array(path: str) -> np.ndarray:
         return np.asarray(img.convert("RGB"))
 
 
+# ---------------------------------------------------------------------------
+# match: local X-ray files -> HuggingFace (split, index)
+# ---------------------------------------------------------------------------
+
 def _strip_other_images(sample: Dict) -> Image.Image:
     """
     Keep only xray_images[0] (colour) and drop rgb_image and other xray images.
@@ -764,37 +301,6 @@ def build_local_hash_map(xray_dir: str) -> Tuple[Dict[str, List[str]], List[str]
     return hash_to_files, all_files
 
 
-def _prepare_foreground_cache(foreground_samples: List[Dict]) -> None:
-    print("Caching foreground samples (highlow + mask arrays)...")
-    for sample in tqdm(foreground_samples, desc="Cache foreground"):
-        cache = sample.setdefault("_cached_arrays", {})
-        if "highlow" not in cache:
-            cache["highlow"] = sample_to_highlow(sample, as_image=True)
-        if "xray_mask" not in cache:
-            cache["xray_mask"] = np.array(sample["xray_image_mask"], dtype=np.uint8)
-        if "_mask_area" not in sample:
-            sample["_mask_area"] = int((cache["xray_mask"] > 0).sum())
-
-
-def _prepare_background_cache(
-    background_samples: List[Dict],
-    image_size: Tuple[int, int],
-) -> None:
-    print("Caching background samples (padded highlow arrays)...")
-    for sample in tqdm(background_samples, desc="Cache background"):
-        cache = sample.setdefault("_cached_arrays", {})
-        if (
-            "highlow_padded" not in cache
-            or cache.get("highlow_padded_size") != image_size
-        ):
-            bg_img_original = sample_to_highlow(sample, as_image=True)
-            bg_img, _ = center_pad_unpad(
-                bg_img_original, target_size=image_size, constant_values=255
-            )
-            cache["highlow_padded"] = bg_img
-            cache["highlow_padded_size"] = image_size
-
-
 def match_dataset_to_local_xray(
     xray_dir: str,
     output_path: str,
@@ -802,7 +308,7 @@ def match_dataset_to_local_xray(
     limit: int = None,
     offline: bool = False,
 ) -> Dict:
-    print("Loading dataset PAGF/DET-COMPASS...")
+    print(f"Loading dataset {HF_DATASET}...")
     dataset_xp = _load_det_compass_dataset(offline=offline)
 
     print(f"Indexing local xray images in {xray_dir}...")
@@ -852,6 +358,10 @@ def match_dataset_to_local_xray(
     return result
 
 
+# ---------------------------------------------------------------------------
+# augment: object bank and container preparation
+# ---------------------------------------------------------------------------
+
 def _load_matches_split_map(matches_path: str) -> Tuple[Dict[str, str], List[Dict]]:
     """
     Returns:
@@ -869,11 +379,9 @@ def _load_matches_split_map(matches_path: str) -> Tuple[Dict[str, str], List[Dic
         if not splits:
             continue
         if len(splits) > 1:
+            # Keep a stable split for files that appear in several splits.
             ambiguous.append({"file": fname, "splits": splits})
-            # pick a stable split to proceed
-            file_to_split[fname] = splits[0]
-        else:
-            file_to_split[fname] = splits[0]
+        file_to_split[fname] = splits[0]
     return file_to_split, ambiguous
 
 
@@ -893,38 +401,41 @@ def _load_matches_index_map(matches_path: str, split: str) -> Dict[str, int]:
 def filter_coco_for_test_split(
     coco_path: str,
     matches_path: str,
-    xray_test_anno_dir: str,
+    test_coco_path: str,
     max_area_ratio: float = 0.5,
-    output_path: str = None,
 ) -> Tuple[Dict, Dict]:
+    """Object-bank COCO restricted to DET-COMPASS 'test' images.
+
+    Images listed in the held-out test COCO are removed, as are images with
+    any annotation covering more than max_area_ratio of the image.
+    """
     print(f"Loading COCO annotations from {coco_path}...")
     with open(coco_path, "r") as f:
         coco = json.load(f)
 
     original_image_count = len(coco.get("images", []))
-    if xray_test_anno_dir:
-        print(f"Loading test annotations from {xray_test_anno_dir}...")
-        with open(xray_test_anno_dir, "r") as f:
-            test_coco = json.load(f)
-        test_files = {
-            img.get("file_name")
-            for img in test_coco.get("images", [])
-            if img.get("file_name")
-        }
-        if test_files:
-            keep_images = [
-                img for img in coco.get("images", [])
-                if img.get("file_name") not in test_files
-            ]
-            keep_image_ids = {img["id"] for img in keep_images}
-            keep_annotations = [
-                ann for ann in coco.get("annotations", [])
-                if ann.get("image_id") in keep_image_ids
-            ]
-            coco["images"] = keep_images
-            coco["annotations"] = keep_annotations
-        print(f"Original images: {original_image_count}")
-        print(f"After removing test images: {len(coco.get('images', []))}")
+    print(f"Loading test annotations from {test_coco_path}...")
+    with open(test_coco_path, "r") as f:
+        test_coco = json.load(f)
+    test_files = {
+        img.get("file_name")
+        for img in test_coco.get("images", [])
+        if img.get("file_name")
+    }
+    if test_files:
+        keep_images = [
+            img for img in coco.get("images", [])
+            if img.get("file_name") not in test_files
+        ]
+        keep_image_ids = {img["id"] for img in keep_images}
+        keep_annotations = [
+            ann for ann in coco.get("annotations", [])
+            if ann.get("image_id") in keep_image_ids
+        ]
+        coco["images"] = keep_images
+        coco["annotations"] = keep_annotations
+    print(f"Original images: {original_image_count}")
+    print(f"After removing test images: {len(coco.get('images', []))}")
 
     print(f"Loading matches from {matches_path}...")
     file_to_split, ambiguous = _load_matches_split_map(matches_path)
@@ -965,10 +476,6 @@ def filter_coco_for_test_split(
         "categories": coco.get("categories", []),
     }
 
-    if output_path:
-        with open(output_path, "w") as f:
-            json.dump(filtered_coco, f)
-
     stats = {
         "num_images": len(coco.get("images", [])),
         "num_annotations": len(coco.get("annotations", [])),
@@ -981,161 +488,17 @@ def filter_coco_for_test_split(
     return filtered_coco, stats
 
 
-def _visualize_filtered_coco_xray(
-    filtered_coco: Dict,
-    dataset_test,
-    matches_path: str,
-    output_dir: str,
-    limit: int = 20,
-) -> Dict:
-    print(f"Saving xray color/high/low visualizations to {output_dir}...")
-    os.makedirs(output_dir, exist_ok=True)
-
-    file_to_index = _load_matches_index_map(matches_path, split="test")
-    saved = 0
-    skipped = 0
-
-    for img in filtered_coco.get("images", []):
-        if saved >= limit:
-            break
-        fname = img.get("file_name")
-        if not fname:
-            skipped += 1
-            continue
-        idx = file_to_index.get(fname)
-        if idx is None:
-            skipped += 1
-            continue
-        sample = dataset_test[idx]
-        xray_images = sample.get("xray_images") or []
-        if len(xray_images) < 4:
-            skipped += 1
-            continue
-
-        colour = np.asarray(xray_images[0])
-        high = np.asarray(xray_images[2])
-        low = np.asarray(xray_images[3])
-        if colour.ndim == 2:
-            colour = np.repeat(colour[:, :, None], 3, axis=2)
-        elif colour.ndim == 3 and colour.shape[2] > 3:
-            colour = colour[:, :, :3]
-        if high.ndim == 3:
-            high = high[:, :, 0]
-        if low.ndim == 3:
-            low = low[:, :, 0]
-        colour, high, low = _crop_arrays_to_min_size(colour, high, low)
-
-        high_rgb = np.repeat(high[:, :, None], 3, axis=2)
-        low_rgb = np.repeat(low[:, :, None], 3, axis=2)
-        combined = np.concatenate([colour, high_rgb, low_rgb], axis=1)
-        combined = np.clip(combined, 0, 255).astype(np.uint8)
-
-        stem = os.path.splitext(os.path.basename(fname))[0] or f"xray_{saved:05d}"
-        out_path = os.path.join(output_dir, f"{stem}_xray_color_high_low.png")
-        Image.fromarray(combined).save(out_path)
-        saved += 1
-
-    summary = {
-        "output_dir": output_dir,
-        "saved": saved,
-        "skipped": skipped,
-        "limit": limit,
-    }
-    print(json.dumps(summary, indent=2))
-    return summary
-
-
-def _visualize_foreground_object_bank(
-    foreground_samples: List[Dict],
-    output_dir: str,
-    limit: int = 0,
-) -> Dict:
-    print(f"Saving foreground object bank visualizations to {output_dir}...")
-    os.makedirs(output_dir, exist_ok=True)
-    saved = 0
-    skipped = 0
-    name_counts: Dict[str, int] = {}
-
-    for idx, sample in enumerate(foreground_samples):
-        if limit and saved >= limit:
-            break
-        high = sample.get("raw_xray_image_high")
-        low = sample.get("raw_xray_image_low")
-        if high is None or low is None:
-            skipped += 1
-            continue
-        high = np.asarray(high)
-        low = np.asarray(low)
-        if high.ndim == 3:
-            high = high[:, :, 0]
-        if low.ndim == 3:
-            low = low[:, :, 0]
-        high, low = _crop_arrays_to_min_size(high, low)
-        highlow_img = np.stack([high, low], axis=-1)
-        if highlow_img.dtype != np.uint8:
-            highlow_img = highlow_img.astype(np.float64)
-            max_val = float(highlow_img.max()) if highlow_img.size else 0.0
-            if max_val <= 1.0:
-                highlow_img = highlow_img * 255.0
-            highlow_img = np.clip(highlow_img, 0, 255).astype(np.uint8)
-        colour = highlow_to_colour(highlow_img)
-        colour = np.clip(colour, 0, 255).astype(np.uint8)
-        high = np.clip(high, 0, 255).astype(np.uint8)
-        low = np.clip(low, 0, 255).astype(np.uint8)
-
-        source_name = sample.get("source_file_name") or ""
-        stem_base = os.path.splitext(os.path.basename(source_name))[0]
-        if not stem_base:
-            stem_base = f"fg_{idx:06d}"
-        name_counts[stem_base] = name_counts.get(stem_base, 0) + 1
-        ann_id = sample.get("annotation_id")
-        if ann_id is not None:
-            stem = f"{stem_base}_ann{ann_id}"
-        elif name_counts[stem_base] > 1:
-            stem = f"{stem_base}_obj{name_counts[stem_base]:02d}"
-        else:
-            stem = stem_base
-        Image.fromarray(colour).save(os.path.join(output_dir, f"{stem}_color.png"))
-        Image.fromarray(high).save(os.path.join(output_dir, f"{stem}_high.png"))
-        Image.fromarray(low).save(os.path.join(output_dir, f"{stem}_low.png"))
-        mask_img = sample.get("xray_image_mask")
-        if mask_img is not None:
-            mask = np.asarray(mask_img)
-            if mask.ndim == 3:
-                mask = mask[:, :, 0]
-            mask = (mask > 0).astype(np.uint8) * 255
-            colour_mask, mask = _crop_arrays_to_min_size(colour, mask)
-            Image.fromarray(mask).save(os.path.join(output_dir, f"{stem}_mask.png"))
-            mask_on = mask > 0
-            overlay = np.array([255, 0, 0], dtype=np.uint8)
-            alpha = 0.5
-            colour_masked = colour_mask.copy().astype(np.float32)
-            colour_masked[mask_on] = (
-                (1.0 - alpha) * colour_masked[mask_on] + alpha * overlay
-            )
-            colour_masked = np.clip(colour_masked, 0, 255).astype(np.uint8)
-            Image.fromarray(colour_masked).save(
-                os.path.join(output_dir, f"{stem}_color_mask.png")
-            )
-        saved += 1
-
-    summary = {
-        "output_dir": output_dir,
-        "saved": saved,
-        "skipped": skipped,
-        "limit": limit,
-        "total": len(foreground_samples),
-    }
-    print(json.dumps(summary, indent=2))
-    return summary
-
-
 def _build_foreground_samples(
     filtered_coco: Dict,
     dataset_test,
     matches_path: str,
     output_dir: str = None,
 ) -> List[Dict]:
+    """Crop every object-bank mask out of its DET-COMPASS test image.
+
+    If output_dir is given, also writes coco_train.json there: the
+    DET-COMPASS boxes of the source images used by the object bank.
+    """
     print("Building foreground samples from filtered COCO annotations...")
     file_to_index = _load_matches_index_map(matches_path, split="test")
     image_meta = {img["id"]: img for img in filtered_coco.get("images", [])}
@@ -1260,7 +623,6 @@ def _build_foreground_samples(
                 "category": int(ann.get("category_id", 0)),
                 "source_file_name": img.get("file_name"),
                 "annotation_id": ann.get("id"),
-                "xray_visible": True,
             }
         )
 
@@ -1268,97 +630,46 @@ def _build_foreground_samples(
     return foreground_samples
 
 
-def split_coco_by_matches_and_plot(
-    coco_path: str,
-    matches_path: str,
-    output_plot_path: str,
-    title: str = "Annotation Area Distribution",
-):
-    """
-    Use HuggingFace matches to split COCO annotations into test/invisible groups,
-    then plot area distributions (all/test/invisible) on one figure.
-    """
-    print(f"Loading COCO annotations from {coco_path}...")
-    with open(coco_path, "r") as f:
-        coco = json.load(f)
+def _prepare_foreground_cache(foreground_samples: List[Dict]) -> None:
+    print("Caching foreground samples (highlow + mask arrays)...")
+    for sample in tqdm(foreground_samples, desc="Cache foreground"):
+        cache = sample.setdefault("_cached_arrays", {})
+        if "highlow" not in cache:
+            cache["highlow"] = sample_to_highlow(sample, as_image=True)
+        if "xray_mask" not in cache:
+            cache["xray_mask"] = np.array(sample["xray_image_mask"], dtype=np.uint8)
+        if "_mask_area" not in sample:
+            sample["_mask_area"] = int((cache["xray_mask"] > 0).sum())
 
-    print(f"Loading matches from {matches_path}...")
-    file_to_split, ambiguous = _load_matches_split_map(matches_path)
 
-    image_id_to_file = {img["id"]: img["file_name"] for img in coco.get("images", [])}
-    image_id_to_area = {
-        img["id"]: (img.get("width", 0) * img.get("height", 0))
-        for img in coco.get("images", [])
-    }
-    image_id_to_split: Dict[int, str] = {}
-    for image_id, fname in image_id_to_file.items():
-        split = file_to_split.get(fname)
-        if split in ("test", "invisible"):
-            image_id_to_split[image_id] = split
+def _padded_background(bg_sample: Dict, image_size: Tuple[int, int]) -> np.ndarray:
+    """High/low container image centre-padded (with 255) or cropped to image_size."""
+    cache = bg_sample.setdefault("_cached_arrays", {})
+    if (
+        "highlow_padded" not in cache
+        or cache.get("highlow_padded_size") != image_size
+    ):
+        bg_img_original = sample_to_highlow(bg_sample, as_image=True)
+        bg_img, _ = center_pad_unpad(
+            bg_img_original, target_size=image_size, constant_values=255
+        )
+        cache["highlow_padded"] = bg_img
+        cache["highlow_padded_size"] = image_size
+    return cache["highlow_padded"]
 
-    all_areas: List[float] = []
-    test_areas: List[float] = []
-    invisible_areas: List[float] = []
-    all_ratios: List[float] = []
-    test_ratios: List[float] = []
-    invisible_ratios: List[float] = []
-    skipped = 0
 
-    for ann in tqdm(coco.get("annotations", []), desc="Collecting annotation areas"):
-        area = ann.get("area", 0)
-        all_areas.append(area)
-        img_area = image_id_to_area.get(ann.get("image_id"), 0)
-        if img_area and img_area > 0:
-            ratio = area / float(img_area)
-            all_ratios.append(ratio)
-        image_id = ann.get("image_id")
-        split = image_id_to_split.get(image_id)
-        if split == "test":
-            test_areas.append(area)
-            if img_area and img_area > 0:
-                test_ratios.append(ratio)
-        elif split == "invisible":
-            invisible_areas.append(area)
-            if img_area and img_area > 0:
-                invisible_ratios.append(ratio)
-        else:
-            skipped += 1
+def _prepare_background_cache(
+    background_samples: List[Dict],
+    image_size: Tuple[int, int],
+) -> None:
+    print("Caching background samples (padded highlow arrays)...")
+    for sample in tqdm(background_samples, desc="Cache background"):
+        _padded_background(sample, image_size)
 
-    fig, axes = plt.subplots(2, 1, figsize=(10, 10))
-    bins = 50
 
-    axes[0].hist(all_areas, bins=bins, alpha=0.5, label="all")
-    axes[0].hist(test_areas, bins=bins, alpha=0.5, label="test")
-    axes[0].hist(invisible_areas, bins=bins, alpha=0.5, label="invisible")
-    axes[0].set_title(title)
-    axes[0].set_xlabel("annotation area")
-    axes[0].set_ylabel("count")
-    axes[0].legend()
-
-    axes[1].hist(all_ratios, bins=bins, alpha=0.5, label="all")
-    axes[1].hist(test_ratios, bins=bins, alpha=0.5, label="test")
-    axes[1].hist(invisible_ratios, bins=bins, alpha=0.5, label="invisible")
-    axes[1].set_title("Annotation Area / Image Area Ratio")
-    axes[1].set_xlabel("area ratio")
-    axes[1].set_ylabel("count")
-    axes[1].legend()
-
-    plt.tight_layout()
-    plt.savefig(output_plot_path, dpi=200)
-
-    summary = {
-        "coco_path": coco_path,
-        "matches_path": matches_path,
-        "output_plot_path": output_plot_path,
-        "num_annotations": len(all_areas),
-        "num_test_annotations": len(test_areas),
-        "num_invisible_annotations": len(invisible_areas),
-        "num_skipped_annotations": skipped,
-        "num_ambiguous_files": len(ambiguous),
-        "num_ratio_entries": len(all_ratios),
-    }
-    return summary
-
+# ---------------------------------------------------------------------------
+# augment: composition and rendering
+# ---------------------------------------------------------------------------
 
 def _sample_transformed_object(
     fg_sample: Dict,
@@ -1369,8 +680,10 @@ def _sample_transformed_object(
     max_perspective: float,
     existing_boxes: List[Tuple[float, float, float, float]],
     gamma: float,
-    max_tries: int = 50,
+    max_tries: int = PLACEMENT_TRIES,
 ):
+    """Draw transformations until the object's box overlaps every already
+    placed box with IoU <= gamma; gives up after max_tries."""
     for _ in range(max_tries):
         objs = transform_xray_crops(
             fg_samples=[fg_sample],
@@ -1397,23 +710,29 @@ def _sample_transformed_object(
     return None, None
 
 
-def create_synthetic_sample_musc(
+def render_xray(composite_img: np.ndarray):
+    """Render a high/low composite with the fixed DET-COMPASS lookup tables.
+
+    Returns (colour, grey, high, low, density); only colour is written to disk.
+    """
+    composite_img = composite_img[..., :2]
+    xray_colour = highlow_to_colour(composite_img)
+    xray_density = highlow_to_density(composite_img)
+    xray_grey = highlow_to_grey(composite_img)
+    xray_high = Image.fromarray(composite_img[..., 0], mode="L")
+    xray_low = Image.fromarray(composite_img[..., 1], mode="L")
+    return xray_colour, xray_grey, xray_high, xray_low, xray_density
+
+
+def create_synthetic_sample(
     foreground_samples: List[Dict],
     background_samples: List[Dict],
     num_objs: int,
     gamma: float,
-    composition_mode: str = "xray",
-    color_map_mode: str = "legacy",
-    color_map_palette: Tuple[str, ...] = ALL_DENSITY_PALETTES,
-    color_map_jitter: float = 0.0,
-    color_map_seed: Optional[int] = None,
-    sample_id: Optional[int] = None,
-    image_size: Tuple[int, int] = (580, 880),
-    max_angle: float = 180.0,
-    max_scale: float = 1.2,
-    max_t: float = 0.75,
-    max_perspective: float = 0.05,
-):
+    composition_mode: str,
+    max_perspective: float,
+) -> Dict:
+    """One synthetic image: one random container plus num_objs bank objects."""
     sample = {
         "xray_images": [],
         "xray_width": None,
@@ -1425,28 +744,13 @@ def create_synthetic_sample_musc(
         },
     }
 
-    if not background_samples:
-        return sample
-
-    bg_sample = random.choice(background_samples)
-    cache = bg_sample.setdefault("_cached_arrays", {})
-    if (
-        "highlow_padded" in cache
-        and cache.get("highlow_padded_size") == image_size
-    ):
-        bg_img = cache["highlow_padded"]
-    else:
-        bg_img_original = sample_to_highlow(bg_sample, as_image=True)
-        bg_img, _ = center_pad_unpad(
-            bg_img_original, target_size=image_size, constant_values=255
-        )
-        cache["highlow_padded"] = bg_img
-        cache["highlow_padded_size"] = image_size
+    bg_img = _padded_background(random.choice(background_samples), IMAGE_SIZE)
 
     if not foreground_samples or num_objs <= 0:
         selected = []
     else:
         selected = np.random.choice(foreground_samples, size=num_objs, replace=True).tolist()
+        # Place large objects first.
         selected.sort(key=lambda x: x.get("_mask_area", 0), reverse=True)
 
     transformed_objs = []
@@ -1455,9 +759,9 @@ def create_synthetic_sample_musc(
         obj, bbox_xyxy = _sample_transformed_object(
             fg_sample=fg_sample,
             image_size=bg_img.shape[0:2],
-            max_angle=max_angle,
-            max_scale=max_scale,
-            max_t=max_t,
+            max_angle=MAX_ANGLE,
+            max_scale=MAX_SCALE,
+            max_t=MAX_TRANSLATION,
             max_perspective=max_perspective,
             existing_boxes=placed_boxes,
             gamma=gamma,
@@ -1486,14 +790,7 @@ def create_synthetic_sample_musc(
         )
         sample["objects"]["categories"].append(obj["fg_sample"].get("category", "unknown"))
 
-    xray_colour, xray_grey, xray_high, xray_low, xray_density = _create_xray_outputs(
-        composite_img=composite_img,
-        color_map_mode=color_map_mode,
-        color_map_palette=color_map_palette,
-        color_map_jitter=color_map_jitter,
-        color_map_seed=color_map_seed,
-        sample_id=sample_id,
-    )
+    xray_colour, xray_grey, xray_high, xray_low, xray_density = render_xray(composite_img)
 
     sample["xray_images"] = [xray_colour, xray_grey, xray_high, xray_low, xray_density]
     sample["xray_height"] = xray_colour.shape[0]
@@ -1502,21 +799,9 @@ def create_synthetic_sample_musc(
     return sample
 
 
-def create_multi_container_sample_musc(
-    foreground_samples, background_samples, num_objs, gamma,
-    container_count_probs=(1.0, 0.0, 0.0), **kwargs,
-):
-    """Compatibility entry point: never sample or concatenate containers."""
-    if tuple(container_count_probs) != (1.0, 0.0, 0.0):
-        raise ValueError("Only one container is permitted in this reproduction.")
-    return create_synthetic_sample_musc(
-        foreground_samples, background_samples, num_objs, gamma, **kwargs
-    )
-
-
 def seed_image(base_seed: int, stage: str, image_id: int) -> int:
     """Independent per-image stream; independent of worker count and chunking."""
-    payload = f"laox-single-legacy-v1:{base_seed}:{stage}:{image_id}".encode("utf-8")
+    payload = f"{SEED_NAMESPACE}:{base_seed}:{stage}:{image_id}".encode("utf-8")
     seed = int.from_bytes(hashlib.sha256(payload).digest()[:4], "big")
     random.seed(seed)
     np.random.seed(seed)
@@ -1526,7 +811,7 @@ def seed_image(base_seed: int, stage: str, image_id: int) -> int:
     return seed
 
 
-def generate_synthetic_dataset_musc(
+def generate_synthetic_dataset(
     foreground_samples: List[Dict],
     background_samples: List[Dict],
     output_dir: str,
@@ -1535,12 +820,6 @@ def generate_synthetic_dataset_musc(
     gamma_range: Tuple[float, float],
     max_perspective: float,
     composition_mode: str,
-    color_map_mode: str,
-    color_map_palette: Tuple[str, ...],
-    color_map_jitter: float,
-    color_map_seed: Optional[int],
-    container_count_probs: Tuple[float, float, float],
-    build_segmentation: bool,
     io_workers: int,
     start_id: int,
     info: Dict,
@@ -1570,24 +849,18 @@ def generate_synthetic_dataset_musc(
     num_min, num_max = num_objects_range
     gamma_min, gamma_max = gamma_range
 
-    for i in tqdm(range(num_generated), desc="musc_augmentation"):
+    for i in tqdm(range(num_generated), desc="synthesis"):
         global_id = start_id + i
         seed_image(base_seed, stage, global_id)
         current_num_objs = np.random.randint(num_min, num_max + 1)
         current_gamma = np.random.uniform(gamma_min, gamma_max)
-        sample = create_multi_container_sample_musc(
+        sample = create_synthetic_sample(
             foreground_samples=foreground_samples,
             background_samples=background_samples,
             num_objs=current_num_objs,
             gamma=current_gamma,
-            container_count_probs=container_count_probs,
-            max_perspective=max_perspective,
             composition_mode=composition_mode,
-            color_map_mode=color_map_mode,
-            color_map_palette=color_map_palette,
-            color_map_jitter=color_map_jitter,
-            color_map_seed=color_map_seed,
-            sample_id=global_id,
+            max_perspective=max_perspective,
         )
 
         png_filename = f"{global_id:06d}.png"
@@ -1615,24 +888,19 @@ def generate_synthetic_dataset_musc(
                 category_id = int(category_id)
             except (TypeError, ValueError):
                 category_id = 0
-            segmentation = []
-            mask_area = bbox[2] * bbox[3] if bbox else 0
 
-            if build_segmentation:
-                mask_arr = np.array(mask, dtype=np.uint8)
-                mask_arr = (mask_arr > 0).astype(np.uint8)
-                contours, _ = cv2.findContours(mask_arr, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-                for contour in contours:
-                    if contour.shape[0] < 3:
-                        continue
-                    flattened = contour.reshape(-1, 2).ravel().tolist()
-                    if len(flattened) >= 6:
-                        segmentation.append(flattened)
-                mask_area = int(mask_arr.sum())
-            else:
-                mask_arr = np.array(mask, dtype=np.uint8)
-                if mask_arr.max() > 0:
-                    mask_area = int(mask_arr.sum())
+            # COCO polygons from the external contours of the object mask.
+            segmentation = []
+            mask_arr = np.array(mask, dtype=np.uint8)
+            mask_arr = (mask_arr > 0).astype(np.uint8)
+            contours, _ = cv2.findContours(mask_arr, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            for contour in contours:
+                if contour.shape[0] < 3:
+                    continue
+                flattened = contour.reshape(-1, 2).ravel().tolist()
+                if len(flattened) >= 6:
+                    segmentation.append(flattened)
+            mask_area = int(mask_arr.sum())
 
             coco_output["annotations"].append(
                 {
@@ -1660,135 +928,14 @@ def generate_synthetic_dataset_musc(
     return coco_json_path
 
 
-def _draw_bboxes_on_rgb_image(
-    image_rgb: np.ndarray,
-    bboxes: List[List[float]],
-    categories: List,
-) -> np.ndarray:
-    vis = np.asarray(image_rgb, dtype=np.uint8).copy()
-    for bbox, category in zip(bboxes, categories):
-        if not bbox or len(bbox) < 4:
-            continue
-        x, y, w, h = bbox
-        x1 = int(round(x))
-        y1 = int(round(y))
-        x2 = int(round(x + w - 1))
-        y2 = int(round(y + h - 1))
-        if x2 <= x1 or y2 <= y1:
-            continue
-        cv2.rectangle(vis, (x1, y1), (x2, y2), color=(255, 0, 0), thickness=2)
-        cv2.putText(
-            vis,
-            str(category),
-            (x1, max(0, y1 - 4)),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            0.45,
-            (255, 0, 0),
-            1,
-            cv2.LINE_AA,
-        )
-    return vis
-
-
-def generate_preview_color_map_examples(
-    foreground_samples: List[Dict],
-    background_samples: List[Dict],
-    output_dir: str,
-    preview_num_samples: int,
-    num_objects_range: Tuple[int, int],
-    gamma_range: Tuple[float, float],
-    max_perspective: float,
-    composition_mode: str,
-    color_map_mode: str,
-    color_map_palette: Tuple[str, ...],
-    color_map_jitter: float,
-    color_map_seed: Optional[int],
-    container_count_probs: Tuple[float, float, float],
-):
-    if not background_samples:
-        raise ValueError("No background samples available from the 'invisible' split.")
-
-    os.makedirs(output_dir, exist_ok=True)
-
-    num_min, num_max = num_objects_range
-    gamma_min, gamma_max = gamma_range
-
-    for i in tqdm(range(preview_num_samples), desc="preview_colormap"):
-        sample_id = i
-        current_num_objs = np.random.randint(num_min, num_max + 1)
-        current_gamma = np.random.uniform(gamma_min, gamma_max)
-
-        # Generate once with legacy mapping to freeze object placement/container layout.
-        sample = create_multi_container_sample_musc(
-            foreground_samples=foreground_samples,
-            background_samples=background_samples,
-            num_objs=current_num_objs,
-            gamma=current_gamma,
-            container_count_probs=container_count_probs,
-            max_perspective=max_perspective,
-            composition_mode=composition_mode,
-            color_map_mode="legacy",
-            color_map_palette=color_map_palette,
-            color_map_jitter=color_map_jitter,
-            color_map_seed=color_map_seed,
-            sample_id=sample_id,
-        )
-
-        legacy_color = np.asarray(sample["xray_images"][0], dtype=np.uint8)
-        legacy_bbox_vis = _draw_bboxes_on_rgb_image(
-            legacy_color,
-            sample["objects"]["xray_bbox"],
-            sample["objects"]["categories"],
-        )
-
-        stem = f"preview_{sample_id:04d}"
-        Image.fromarray(legacy_color).save(os.path.join(output_dir, f"{stem}_legacy.png"))
-        Image.fromarray(legacy_bbox_vis).save(os.path.join(output_dir, f"{stem}_legacy_bbox.png"))
-
-        high = np.asarray(sample["xray_images"][2], dtype=np.uint8)
-        low = np.asarray(sample["xray_images"][3], dtype=np.uint8)
-        highlow = np.stack([high, low], axis=-1)
-
-        for j, palette_key in enumerate(color_map_palette):
-            base_seed = 0 if color_map_seed is None else int(color_map_seed)
-            rng = np.random.default_rng(base_seed + sample_id * 1000 + j)
-            if color_map_mode == "density_palette_2d":
-                colour_img, _ = highlow_to_colour_density_palette_2d(
-                    highlow,
-                    palette_key=palette_key,
-                    jitter=color_map_jitter,
-                    rng=rng,
-                )
-            else:
-                colour_img, _ = highlow_to_colour_density_palette(
-                    highlow,
-                    palette_key=palette_key,
-                    jitter=color_map_jitter,
-                    rng=rng,
-                )
-            Image.fromarray(colour_img).save(
-                os.path.join(output_dir, f"{stem}_palette_{palette_key}.png")
-            )
-
-    print(
-        json.dumps(
-            {
-                "preview_dir": output_dir,
-                "preview_num_samples": preview_num_samples,
-                "num_palettes": len(color_map_palette),
-                "color_map_mode": color_map_mode,
-                "files_per_sample": 2 + len(color_map_palette),
-            },
-            indent=2,
-        )
-    )
-
-
+# ---------------------------------------------------------------------------
+# merge
+# ---------------------------------------------------------------------------
 
 def merge_coco_jsons(
     output_dir: str,
-    output_path: str = None,
-    pattern: str = "coco_*.json",
+    output_path: str,
+    pattern: str,
 ):
     json_paths = sorted(glob.glob(os.path.join(output_dir, pattern)))
     if not json_paths:
@@ -1803,7 +950,6 @@ def merge_coco_jsons(
     }
 
     images_seen = set()
-    ann_id = 0
     for idx, path in enumerate(json_paths):
         with open(path, "r") as f:
             data = json.load(f)
@@ -1820,16 +966,13 @@ def merge_coco_jsons(
             images_seen.add(img_id)
 
         for ann in data.get("annotations", []):
-            ann_copy = dict(ann)
-            merged["annotations"].append(ann_copy)
+            merged["annotations"].append(dict(ann))
 
     merged["images"].sort(key=lambda item: item["id"])
     merged["annotations"].sort(key=lambda item: (item["image_id"], item["id"]))
     for ann_id, ann in enumerate(merged["annotations"]):
         ann["id"] = ann_id
 
-    if output_path is None:
-        output_path = os.path.join(output_dir, "coco.json")
     with open(output_path, "w") as f:
         json.dump(merged, f)
 
@@ -1837,394 +980,165 @@ def merge_coco_jsons(
     return output_path
 
 
-def main():
-    parser = argparse.ArgumentParser(
-        description="Match DET-COMPASS xray images, split COCO, or generate MUSC-style synthetic data."
-    )
-    parser.add_argument(
-        "--dataset_root",
-        default="",
-        help="Root directory for datasets (used with --dataset_gen and --stage).",
-    )
-    parser.add_argument(
-        "--dataset_gen",
-        default="",
-        help="Generated dataset name under dataset_root.",
-    )
-    parser.add_argument(
-        "--stage",
-        default="",
-        help="Stage name under dataset path.",
-    )
-    parser.add_argument(
-        "--xray_dir",
-        default="/path/to/datasets/det_compass_xp/xray",
-        help="Directory containing local xray images to match.",
-    )
-    parser.add_argument(
-        "--output_path",
-        default="det_compass_xp_xray_matches.json",
-        help="Path to write the filename->(split,index) mapping JSON.",
-    )
-    parser.add_argument(
-        "--limit",
-        type=int,
-        default=None,
-        help="Optional limit per split for debugging.",
-    )
-    parser.add_argument(
-        "--mode",
-        choices=["match", "split_coco", "augment", "preview", "merge"],
-        default="augment",
-        help="Run matching, split COCO, or generate MUSC-style augmentation.",
-    )
-    parser.add_argument(
-        "--coco_dir",
-        default="/path/to/datasets/det_compass_xp/coco_cutler",
-        help="COCO base path; final coco_path is coco_dir_{crop_ablation}.",
-    )
-    parser.add_argument(
-        "--crop_ablation",
-        default="musc",
-        help="Suffix appended to coco_dir to form coco_path (without .json).",
-    )
-    parser.add_argument(
-        "--xray_test_anno_dir",
-        default="/path/to/datasets/det_compass_xp/coco_agnostic.json",
-        help="COCO json containing test images to exclude.",
-    )
-    parser.add_argument(
-        "--matches_path",
-        default="/path/to/datasets/det_compass_xp/huggingface_matches.json",
-        help="Match JSON generated by this script.",
-    )
-    parser.add_argument(
-        "--plot_path",
-        default="coco_musc_area_distribution.png",
-        help="Output plot path.",
-    )
-    parser.add_argument(
-        "--output_dir",
-        default="/path/to/datasets/det_compass_xp/musc_aug",
-        help="Output directory for synthetic samples.",
-    )
-    parser.add_argument(
-        "--xray_vis_dir",
-        default="",
-        help="Optional directory to save xray color/high/low visualizations.",
-    )
-    parser.add_argument(
-        "--xray_vis_limit",
-        type=int,
-        default=20,
-        help="Maximum number of filtered xray images to visualize.",
-    )
-    parser.add_argument(
-        "--fg_vis_dir",
-        default="",
-        help="Optional directory to save cropped foreground object bank visualizations.",
-    )
-    parser.add_argument(
-        "--fg_vis_limit",
-        type=int,
-        default=0,
-        help="Maximum number of foreground objects to visualize (0 for all).",
-    )
-    parser.add_argument(
-        "--filtered_coco_path",
-        default="",
-        help="Optional path to save filtered COCO (test-only, large areas removed).",
-    )
-    parser.add_argument(
-        "--max_area_ratio",
-        type=float,
-        default=0.5,
-        help="Drop images if any annotation area ratio exceeds this value.",
-    )
-    parser.add_argument(
-        "--num_generated",
-        type=int,
-        default=0,
-        help="Number of synthetic images to generate.",
-    )
-    parser.add_argument(
-        "--preview_num_samples",
-        type=int,
-        default=6,
-        help="Number of preview base scenes to generate for color-map comparison.",
-    )
-    parser.add_argument(
-        "--preview_dir",
-        default="preview_colormap",
-        help="Output directory (relative to output_dir if not absolute) for preview images.",
-    )
-    parser.add_argument(
-        "--start_id",
-        type=int,
-        default=0,
-        help="Start id offset for generated images (used for sharded generation).",
-    )
-    parser.add_argument(
-        "--num_objects",
-        type=parse_range_int,
-        default="3,5",
-        help="Object count range per image, e.g. '3,8' or '5'.",
-    )
-    parser.add_argument(
-        "--composition_mode",
-        choices=["xray", "rgb"],
-        default="xray",
-        help="Composition mode: xray uses Beer-Lambert blending, rgb uses copy-paste overwrite.",
-    )
-    parser.add_argument(
-        "--color_map_mode",
-        choices=["legacy"],
-        default="legacy",
-        help="Color mapping mode for generated xray color images.",
-    )
-    parser.add_argument(
-        "--color_map_palette",
-        type=parse_palette_list,
-        default=ALL_DENSITY_PALETTES,
-        help=(
-            "Comma-separated palette keys/profile names for density_palette mode. "
-            "Examples: 'all', 'kept', 'legacyplus', 'whitezero', 'twod_new', or explicit key list."
-        ),
-    )
-    parser.add_argument(
-        "--color_map_jitter",
-        type=float,
-        default=0.0,
-        help="Max per-channel RGB jitter (0-255 scale) for density_palette mode.",
-    )
-    parser.add_argument(
-        "--color_map_seed",
-        type=int,
-        default=None,
-        help="Optional seed for deterministic color-map sampling across images.",
-    )
-    parser.add_argument(
-        "--gamma",
-        type=parse_range_float,
-        default="0.0,0.3",
-        help="Max IoU overlap range, e.g. '0.0,0.4' or '0.2'.",
-    )
-    parser.add_argument(
-        "--container_count_probs",
-        type=parse_container_count_probs,
-        default=(1.0, 0.0, 0.0),
-        help=(
-            "Probabilities for sampling 1/2/3 containers in one image. "
-            "Format: 'p1,p2,p3' with p1>p2>p3 and p2+p3>=0.30."
-        ),
-    )
-    parser.add_argument(
-        "--max_perspective",
-        type=float,
-        default=0.1,
-        help="Max perspective jitter ratio per corner for homography.",
-    )
-    parser.add_argument(
-        "--seed",
-        type=int,
-        default=40,
-        help="Fixed base seed, inherited from the existing sample demo; per-image streams are worker-independent.",
-    )
-    parser.add_argument(
-        "--build_segmentation",
-        action="store_true",
-        default=True,
-        help="Build COCO polygon segmentation from masks.",
-    )
-    parser.add_argument(
+# ---------------------------------------------------------------------------
+# CLI
+# ---------------------------------------------------------------------------
+
+def _add_offline_flags(parser: argparse.ArgumentParser) -> None:
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument(
         "--offline",
+        dest="offline",
         action="store_true",
         default=True,
-        help="Force HuggingFace datasets to load from local cache only.",
+        help="Load DET-COMPASS from the local HuggingFace cache only (default).",
     )
-    parser.add_argument(
+    group.add_argument(
         "--online",
         dest="offline",
         action="store_false",
-        help="Disable offline mode and allow downloads.",
+        help="Allow HuggingFace downloads (needed on the first run).",
     )
-    parser.add_argument(
-        "--io_workers",
-        type=int,
-        default=4,
-        help="Thread workers for async PNG saves.",
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        description="LAO-X X-ray synthesis (single container, fixed DET-COMPASS lookup tables).",
     )
-    parser.add_argument(
-        "--merge_pattern",
-        default="coco_*.json",
-        help="Glob pattern for COCO json shards in merge mode.",
-    )
-    parser.add_argument(
-        "--merge_output",
-        default="coco.json",
-        help="Output filename for merged COCO json (relative to output_dir).",
-    )
+    sub = parser.add_subparsers(dest="command", required=True)
+
+    p = sub.add_parser("match", help="Map local DET-COMPASS X-ray files to HuggingFace split/index.")
+    p.add_argument("--xray-dir", required=True,
+                   help="Directory with the local DET-COMPASS colour X-ray images.")
+    p.add_argument("--output", default="huggingface_matches.json",
+                   help="Output matches JSON (default: huggingface_matches.json).")
+    p.add_argument("--limit", type=int, default=None,
+                   help="Optional limit per split, for debugging.")
+    _add_offline_flags(p)
+
+    p = sub.add_parser("augment", help="Generate one shard of a synthesis stage.")
+    p.add_argument("--object-bank-json", required=True,
+                   help="COCO JSON with the object-bank masks (on DET-COMPASS test images).")
+    p.add_argument("--test-coco", required=True,
+                   help="Held-out labelled COCO JSON; its images are excluded from the object bank.")
+    p.add_argument("--matches-json", required=True,
+                   help="Matches JSON written by the 'match' subcommand.")
+    p.add_argument("--output-dir", required=True,
+                   help="Stage output directory (xray/ and COCO JSONs are written here).")
+    p.add_argument("--stage", required=True,
+                   help="Stage name (e.g. easy, hard, extreme); part of every image seed.")
+    p.add_argument("--num-generated", type=int, required=True,
+                   help="Number of images in this shard.")
+    p.add_argument("--start-id", type=int, default=0,
+                   help="Id of the first image of this shard (default: 0).")
+    p.add_argument("--num-objects", type=parse_range_int, required=True,
+                   help="Objects per image, 'min,max' or 'n'.")
+    p.add_argument("--gamma", type=parse_range_float, required=True,
+                   help="Maximum box IoU between placed objects, 'min,max' or 'g'; drawn per image.")
+    p.add_argument("--composition-mode", choices=["xray", "rgb"], default="xray",
+                   help="xray: Beer-Lambert composition (LAO-X); rgb: copy-paste overwrite (ablation).")
+    p.add_argument("--max-area-ratio", type=float, default=0.5,
+                   help="Drop object-bank images with any mask larger than this image fraction (default: 0.5).")
+    p.add_argument("--max-perspective", type=float, default=0.1,
+                   help="Max perspective jitter per corner, as an image-size fraction (default: 0.1).")
+    p.add_argument("--seed", type=int, default=40,
+                   help="Base seed (default: 40); per-image streams do not depend on sharding.")
+    p.add_argument("--io-workers", type=int, default=4,
+                   help="Threads writing PNG files (default: 4).")
+    _add_offline_flags(p)
+
+    p = sub.add_parser("merge", help="Merge the COCO shards of a stage into one file.")
+    p.add_argument("--output-dir", required=True, help="Stage output directory.")
+    p.add_argument("--pattern", default="coco_[0-9]*_[0-9]*.json",
+                   help="Glob for the shard files (default: 'coco_[0-9]*_[0-9]*.json').")
+    p.add_argument("--output", default="coco.json",
+                   help="Merged file name, relative to --output-dir (default: coco.json).")
+    return parser
+
+
+def main():
+    parser = build_parser()
     args = parser.parse_args()
-    if args.mode == "preview":
-        parser.error("Color-palette preview is disabled in the fixed-LUT reproduction.")
-    if not 0 <= args.seed < 2**32:
+    if args.command == "augment" and not 0 <= args.seed < 2**32:
         parser.error("seed must be an unsigned 32-bit integer")
-    if args.color_map_jitter != 0 or args.container_count_probs != (1.0, 0.0, 0.0):
-        parser.error("This profile requires one container and zero color jitter.")
     cv2.setNumThreads(1)
     cv2.ocl.setUseOpenCL(False)
 
-    if args.dataset_root and args.dataset_gen:
-        base_out = os.path.join(args.dataset_root, args.dataset_gen)
-        if args.stage:
-            base_out = os.path.join(base_out, args.stage)
-        args.output_dir = base_out
-        if args.filtered_coco_path:
-            args.filtered_coco_path = os.path.join(args.output_dir, args.filtered_coco_path)
-
-    crop_suffix = args.crop_ablation
-    if not crop_suffix.endswith(".json"):
-        crop_suffix = f"{crop_suffix}.json"
-    args.coco_path = f"{args.coco_dir}_{crop_suffix}"
-
-    if args.offline:
+    if getattr(args, "offline", False):
         print("Offline mode enabled: using local HuggingFace cache only.")
 
-    if args.mode == "match":
-        print("Mode: match")
+    if args.command == "match":
         match_dataset_to_local_xray(
             xray_dir=args.xray_dir,
-            output_path=args.output_path,
+            output_path=args.output,
             splits=("test", "invisible"),
             limit=args.limit,
             offline=args.offline,
         )
-    elif args.mode == "split_coco":
-        print("Mode: split_coco")
-        summary = split_coco_by_matches_and_plot(
-            coco_path=args.coco_path,
-            matches_path=args.matches_path,
-            output_plot_path=args.plot_path,
-            title="COCO Cutler MUSC Annotation Area Distribution",
-        )
-        print(json.dumps(summary, indent=2))
-    elif args.mode == "merge":
-        print("Mode: merge")
-        output_path = os.path.join(args.output_dir, args.merge_output)
+        return
+
+    if args.command == "merge":
         merge_coco_jsons(
             output_dir=args.output_dir,
-            output_path=output_path,
-            pattern=args.merge_pattern,
+            output_path=os.path.join(args.output_dir, args.output),
+            pattern=args.pattern,
         )
-    else:
-        print(f"Mode: {args.mode}")
-        filtered_coco, stats = filter_coco_for_test_split(
-            coco_path=args.coco_path,
-            matches_path=args.matches_path,
-            xray_test_anno_dir=args.xray_test_anno_dir,
-            max_area_ratio=args.max_area_ratio,
-            output_path=args.filtered_coco_path or None,
+        return
+
+    filtered_coco, stats = filter_coco_for_test_split(
+        coco_path=args.object_bank_json,
+        matches_path=args.matches_json,
+        test_coco_path=args.test_coco,
+        max_area_ratio=args.max_area_ratio,
+    )
+    print(json.dumps(stats, indent=2))
+
+    print(f"Loading dataset {HF_DATASET} (offline={args.offline})...")
+    dataset_xp = _load_det_compass_dataset(offline=args.offline)
+    for split in ("test", "invisible"):
+        if split in dataset_xp and "rgb_image" in dataset_xp[split].column_names:
+            dataset_xp[split] = dataset_xp[split].remove_columns("rgb_image")
+
+    set_seed(args.seed)
+
+    foreground_samples = _build_foreground_samples(
+        filtered_coco=filtered_coco,
+        dataset_test=dataset_xp["test"],
+        matches_path=args.matches_json,
+        output_dir=args.output_dir if args.start_id == 0 else None,
+    )
+    background_samples = list(dataset_xp["invisible"])
+
+    _prepare_foreground_cache(foreground_samples)
+    _prepare_background_cache(background_samples, image_size=IMAGE_SIZE)
+
+    print(
+        json.dumps(
+            {
+                "foreground_samples": len(foreground_samples),
+                "background_samples": len(background_samples),
+            },
+            indent=2,
         )
-        print(json.dumps(stats, indent=2))
+    )
 
-        print("Loading dataset PAGF/DET-COMPASS...,offline={}".format(args.offline))
-        dataset_xp = _load_det_compass_dataset(offline=args.offline)
-        print("Dropping rgb_image columns to speed up...")
-        for split in ("test", "invisible"):
-            if split in dataset_xp and "rgb_image" in dataset_xp[split].column_names:
-                dataset_xp[split] = dataset_xp[split].remove_columns("rgb_image")
-
-        if args.xray_vis_dir:
-            vis_dir = args.xray_vis_dir
-            if not os.path.isabs(vis_dir):
-                vis_dir = os.path.join(args.output_dir, vis_dir)
-            _visualize_filtered_coco_xray(
-                filtered_coco=filtered_coco,
-                dataset_test=dataset_xp["test"],
-                matches_path=args.matches_path,
-                output_dir=vis_dir,
-                limit=args.xray_vis_limit,
-            )
-
-        if args.seed is not None:
-            print(f"Setting random seed to {args.seed}...")
-            set_seed(args.seed)
-
-        foreground_samples = _build_foreground_samples(
-            filtered_coco=filtered_coco,
-            dataset_test=dataset_xp["test"],
-            matches_path=args.matches_path,
-            output_dir=args.output_dir if args.start_id == 0 else None,
-        )
-        background_samples = list(dataset_xp["invisible"])
-
-        if args.fg_vis_dir:
-            fg_vis_dir = args.fg_vis_dir
-            if not os.path.isabs(fg_vis_dir):
-                fg_vis_dir = os.path.join(args.output_dir, fg_vis_dir)
-            _visualize_foreground_object_bank(
-                foreground_samples=foreground_samples,
-                output_dir=fg_vis_dir,
-                limit=args.fg_vis_limit,
-            )
-
-        _prepare_foreground_cache(foreground_samples)
-        _prepare_background_cache(background_samples, image_size=(580, 880))
-
-        print("Starting synthetic generation...")
-        print(
-            json.dumps(
-                {
-                    "foreground_samples": len(foreground_samples),
-                    "background_samples": len(background_samples),
-                },
-                indent=2,
-            )
-        )
-
-        if args.mode == "preview":
-            preview_dir = args.preview_dir
-            if not os.path.isabs(preview_dir):
-                preview_dir = os.path.join(args.output_dir, preview_dir)
-            generate_preview_color_map_examples(
-                foreground_samples=foreground_samples,
-                background_samples=background_samples,
-                output_dir=preview_dir,
-                preview_num_samples=args.preview_num_samples,
-                num_objects_range=args.num_objects,
-                gamma_range=args.gamma,
-                max_perspective=args.max_perspective,
-                composition_mode=args.composition_mode,
-                color_map_mode=args.color_map_mode,
-                color_map_palette=args.color_map_palette,
-                color_map_jitter=args.color_map_jitter,
-                color_map_seed=args.color_map_seed,
-                container_count_probs=args.container_count_probs,
-            )
-        else:
-            generate_synthetic_dataset_musc(
-                foreground_samples=foreground_samples,
-                background_samples=background_samples,
-                output_dir=args.output_dir,
-                num_generated=args.num_generated,
-                num_objects_range=args.num_objects,
-                gamma_range=args.gamma,
-                max_perspective=args.max_perspective,
-                composition_mode=args.composition_mode,
-                color_map_mode=args.color_map_mode,
-                color_map_palette=args.color_map_palette,
-                color_map_jitter=args.color_map_jitter,
-                color_map_seed=args.color_map_seed,
-                container_count_probs=args.container_count_probs,
-                build_segmentation=args.build_segmentation,
-                io_workers=args.io_workers,
-                start_id=args.start_id,
-                info=filtered_coco.get("info", {}),
-                licenses=filtered_coco.get("licenses", []),
-                categories=filtered_coco.get("categories", []),
-                base_seed=args.seed,
-                stage=args.stage,
-            )
+    generate_synthetic_dataset(
+        foreground_samples=foreground_samples,
+        background_samples=background_samples,
+        output_dir=args.output_dir,
+        num_generated=args.num_generated,
+        num_objects_range=args.num_objects,
+        gamma_range=args.gamma,
+        max_perspective=args.max_perspective,
+        composition_mode=args.composition_mode,
+        io_workers=args.io_workers,
+        start_id=args.start_id,
+        info=filtered_coco.get("info", {}),
+        licenses=filtered_coco.get("licenses", []),
+        categories=filtered_coco.get("categories", []),
+        base_seed=args.seed,
+        stage=args.stage,
+    )
 
 
 if __name__ == "__main__":

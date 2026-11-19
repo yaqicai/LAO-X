@@ -10,6 +10,11 @@ import torch
 from PIL import Image, ImageDraw
 from pycocotools import mask as mask_utils
 
+from config import Root as DATA_ROOT
+
+REPO_ROOT = os.path.dirname(os.path.abspath(__file__))
+RESULTS_ROOT = os.environ.get("LAOX_RESULTS_ROOT", os.path.join(REPO_ROOT, "results"))
+
 
 def _add_sam2_to_sys_path() -> None:
     repo_root = Path(__file__).resolve().parent
@@ -284,31 +289,16 @@ def visualize_sam2_dir(
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    # parser.add_argument(
-    #     "--image",
-    #     default="/path/to/datasets/det_compass_syn_100/xray/000010.png",
-    #     help="Path to 000000.png",
-    # )
     parser.add_argument(
         "--json",
-        default="/path/to/LAO-X/results/granularity_divide_and_conquer/vis/000010.json",
+        default=os.path.join(RESULTS_ROOT, "granularity_divide_and_conquer/vis/000010.json"),
         help="Path to granularity divide-and-conquer JSON",
     )
     parser.add_argument(
         "--ckpt",
-        default="/path/to/LAO-X/results/train/det_compass_syn_100/dir/checkpoints/checkpoint_5.pt",
+        default=os.path.join(RESULTS_ROOT, "train/det_compass_syn_100/dir/checkpoints/checkpoint_5.pt"),
         help="Path to trained UnSAMv2 checkpoint",
     )
-    # parser.add_argument(
-    #     "--culter_out",
-    #     default="000010_culter.png",
-    #     help="Output path for CutLER visualization",
-    # )
-    # parser.add_argument(
-    #     "--unsamv2_out",
-    #     default="000010_unsamv2_gra.png",
-    #     help="Output path for UnSAMv2 visualization (prefix when multiple gra values)",
-    # )
     parser.add_argument(
         "--gra",
         type=float,
@@ -353,23 +343,18 @@ def main():
             device=args.device,
         )
         return
-    # args.ckpt = "/path/to/LAO-X/results/train/{}/dir/checkpoints/checkpoint_5.pt".format(args.dataset.lower())
-    
-    # if args.dataset == "det_compass_syn_100":
-    gt_path = f"/path/to/datasets/{args.dataset.lower()}/coco.json"
-    # elif args.dataset == "PIXray":
-    #     gt_path = f"/path/to/datasets/{args.dataset.lower()}/coco.json"
+    gt_path = os.path.join(DATA_ROOT, args.dataset.lower(), "coco.json")
     args.image_id_idx = args.image_id
     if args.dataset == "PIXray":
         with open(gt_path, 'r') as f:
             gt_anno = json.load(f)
         args.image_id = gt_anno['images'][int(args.image_id)]['file_name'].split('/')[-1].split('.')[0]
     if args.dataset == "det_compass_syn_100":
-        args.image = "/path/to/datasets/{}/xray/{}.png".format(args.dataset.lower(), args.image_id)
+        args.image = os.path.join(DATA_ROOT, args.dataset.lower(), "xray", f"{args.image_id}.png")
     elif args.dataset == "PIXray":
-        args.image = "/path/to/datasets/{}/PIXray/{}.png".format(args.dataset.lower(), args.image_id)
+        args.image = os.path.join(DATA_ROOT, args.dataset.lower(), "PIXray", f"{args.image_id}.png")
     elif args.dataset == "det_compass_xp":
-        args.image = "/path/to/datasets/{}/{}.png".format(args.dataset.lower(), args.image_id)
+        args.image = os.path.join(DATA_ROOT, args.dataset.lower(), f"{args.image_id}.png")
     
     gt_out = f"./results/UnSAMv2_vis/{args.image_id}_gt.png"
     if os.path.exists(gt_path):
@@ -378,9 +363,10 @@ def main():
     else:
         print("gt_path not found:", gt_path)
     
-    args.json = "/path/to/LAO-X/results/cutler/{}/granularity_divide_and_conquer/vis/{}.json".format(args.dataset.lower(), args.image_id)
-    args.cutler_out = f"/path/to/LAO-X/results/UnSAMv2_vis/{args.image_id}_culter.png"
-    # visualize_culter(args.image, args.json, args.cutler_out)
+    args.json = os.path.join(
+        RESULTS_ROOT, "cutler", args.dataset.lower(), "granularity_divide_and_conquer/vis", f"{args.image_id}.json"
+    )
+    args.cutler_out = os.path.join(RESULTS_ROOT, "UnSAMv2_vis", f"{args.image_id}_culter.png")
     gra_list = [g.strip() for g in args.gras.split(",") if g.strip()]
     if len(gra_list) > 1:
         fusion_path = (

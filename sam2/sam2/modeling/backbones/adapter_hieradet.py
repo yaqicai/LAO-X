@@ -377,24 +377,24 @@ class Hiera(nn.Module):
 
         for i, blk in enumerate(self.blocks):
             if i < 2:
-                self.block1.append(blk)  # 第一个块包含前2个元素
+                self.block1.append(blk)  # first block: the first 2 blocks
             elif 1 < i < 4:
-                self.block2.append(blk)  # 第二个块包含接下来的2个元素
+                self.block2.append(blk)  # second block: the next 2 blocks
             elif 3 < i < 15:
-                self.block3.append(blk)  # 第三个块包含接下来的11个元素
+                self.block3.append(blk)  # third block: the next 11 blocks
             elif 14 < i:
-                self.block4.append(blk)  # 其余元素组成第四个块
+                self.block4.append(blk)  # fourth block: the remaining blocks
                 # print(i)
 
         # for i, blk in enumerate(self.blocks):
         #     if i < 3:
-        #         self.block1.append(blk)  # 第一个块包含前3个元素
+        #         self.block1.append(blk)  # first block: the first 3 blocks
         #     elif 2 < i < 9:
-        #         self.block2.append(blk)  # 第二个块包含接下来的6个元素
+        #         self.block2.append(blk)  # second block: the next 6 blocks
         #     elif 8 < i < 45:
-        #         self.block3.append(blk)  # 第三个块包含接下来的36个元素
+        #         self.block3.append(blk)  # third block: the next 36 blocks
         #     elif 44 < i:
-        #         self.block4.append(blk)  # 其余元素组成第四个块
+        #         self.block4.append(blk)  # fourth block: the remaining blocks
 
         # Add pos embed
         x = x + self._get_pos_embed(x.shape[1:3])

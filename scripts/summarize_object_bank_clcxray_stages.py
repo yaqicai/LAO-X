@@ -4,6 +4,7 @@
 import argparse
 import io
 import json
+import os
 import sys
 from contextlib import redirect_stdout
 from pathlib import Path
@@ -16,12 +17,11 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
+from config import XrayRoot
 from util_xray import _apply_region_protocol, _get_protocol_preset
 
 
-DEFAULT_ANNOTATION = Path(
-    "/path/to/datasets/CLCXray/annotations/coco_agnostic.json"
-)
+DEFAULT_ANNOTATION = Path(XrayRoot["CLCXray"]) / "annotations" / "coco_agnostic.json"
 GRANULARITIES = tuple(f"{value / 10:.1f}" for value in range(1, 11))
 METHODS = {
     "cutler_n1": "CutLER N1 object bank",
@@ -54,13 +54,19 @@ TABLE4 = {
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--output-root", type=Path, default=REPO_ROOT / "output_eval")
+    parser.add_argument(
+        "--output-root",
+        type=Path,
+        default=Path(os.environ.get("LAOX_OUTPUT_EVAL", REPO_ROOT / "output_eval")),
+    )
     parser.add_argument("--annotation", type=Path, default=DEFAULT_ANNOTATION)
     parser.add_argument("--stages", nargs="+", choices=STAGES, default=list(STAGES))
     parser.add_argument(
         "--output-dir",
         type=Path,
-        default=REPO_ROOT / "analysis" / "object_bank_rebuttal",
+        default=Path(os.environ.get("LAOX_RESULTS_ROOT", REPO_ROOT / "results"))
+        / "analysis"
+        / "object_bank_clcxray",
     )
     return parser.parse_args()
 

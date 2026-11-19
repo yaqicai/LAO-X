@@ -1,9 +1,38 @@
+#!/usr/bin/env bash
+# Class-agnostic detection evaluation of curriculum-trained UnSAMv2 checkpoints
+# (sam2/training/train_curriculum.sh) with test_det_v2.py. One job per
+# (stage, granularity) pair, distributed over the GPUs in GPUS.
+#
+# Usage:
+#   [VAR=value ...] bash scripts/task_test_augmentation_restart.sh [EXPERIMENT_NAME] [TRAIN_ROOT]
+#
+# Checkpoint: ${TRAIN_ROOT}/augmentation_restart_<EXPERIMENT_NAME>/<stage>/log/checkpoints/checkpoint_<CKPT_SUFFIX>.pt
+# (TRAIN_ROOT default ${LAOX_RESULTS_ROOT}/train), or an explicit SAM2_CKPT.
+# Predictions and metrics: output_eval/<dataset, lower-case>_img<START_ID>_<END_ID>_unsamv2_<gra>_augmentation_restart_<EXPERIMENT_NAME>_<stage>_m<MASK_THRESHOLD>_<CKPT_SUFFIX>/
+#
+# Paper evaluation on DET-COMPASS:
+#   DATASET=det_compass_xp STAGES=extreme GRAS=0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8 \
+#   MASK_THRESHOLD=0.5 CKPT_SUFFIX=48 GPUS=0,1,2,3,4,5,6,7 \
+#   bash scripts/task_test_augmentation_restart.sh crop_musc_aug_xp_fusion_bs16
+# Cross-dataset: the same with DATASET=CLCXray, DvXray, HiXray, pidray or PIXray.
+#
+# Environment (defaults in brackets):
+#   DATASET [det_compass_xp]   STAGES [easy]   GRAS [0.1,...,1.0]   GPUS [0]
+#   MASK_THRESHOLD [0.5]   CKPT_SUFFIX [] (e.g. 48 -> checkpoint_48.pt; empty -> checkpoint.pt)
+#   START_ID [0]   END_ID [full test split of DATASET]   SAVE_EVERY [100]
+#   VAL_JSON, IMAGE_ROOT   override the annotation file / image directory
+#   SAM2_CKPT              evaluate this checkpoint instead of the experiment's
+#   MODEL_SCALE            passed to --model-scale (e.g. large); default: test_det_v2.py default
+#   EVAL_SEED [1]   EVAL_WANDB [0]   MODEL_SEED, TRAIN_DATA_PROFILE (provenance only)
+#   PYTHON [python]   LAOX_DATA_ROOT, LAOX_RESULTS_ROOT
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 cd "${REPO_ROOT}"
+PYTHON="${PYTHON:-python}"
+LAOX_RESULTS_ROOT="${LAOX_RESULTS_ROOT:-${REPO_ROOT}/results}"
+
 COMMENT="${1:-}"
-TRAIN_ROOT="${2:-${TRAIN_ROOT:-results/train}}"
-# TRAIN_ROOT="results/train"
+TRAIN_ROOT="${2:-${TRAIN_ROOT:-${LAOX_RESULTS_ROOT}/train}}"
 if [[ -n "${COMMENT}" ]]; then
   CKPT_ROOT="${TRAIN_ROOT}/augmentation_restart_${COMMENT}"
   COMMENT_SUFFIX="_augmentation_restart_${COMMENT}"
@@ -24,8 +53,8 @@ SAVE_EVERY="${SAVE_EVERY:-100}"
 EVAL_SEED="${EVAL_SEED:-${SEED:-1}}"
 EVAL_WANDB="${EVAL_WANDB:-0}"
 MODEL_SEED="${MODEL_SEED:-}"
+MODEL_SCALE="${MODEL_SCALE:-}"
 TRAIN_DATA_PROFILE="${TRAIN_DATA_PROFILE:-}"
-ALLOW_CHECKPOINT_FALLBACK="${ALLOW_CHECKPOINT_FALLBACK:-0}"
 if [[ -z "${END_ID}" ]]; then
   case "${DATASET}" in
     det_compass_xp) END_ID=307 ;;
@@ -40,8 +69,6 @@ fi
 CKPT_SUFFIX="${CKPT_SUFFIX:-}"
 SAM2_PROFILE="${SAM2_PROFILE:-0}"
 SAM2_CKPT="${SAM2_CKPT:-}"
-FALLBACK_TRAIN_ROOT="${FALLBACK_TRAIN_ROOT:-/path/to/results/train}"
-UNSAMV2_OFFICIAL_CKPT="${UNSAMV2_OFFICIAL_CKPT:-/path/to/results/official_ckpt/unsamv2_plus_ckpt.pt}"
 
 DATASET_ARGS=()
 if [[ -n "${VAL_JSON}" ]]; then
@@ -57,6 +84,9 @@ if [[ -n "${IMAGE_ROOT}" ]]; then
     exit 1
   fi
   DATASET_ARGS+=(--image-root "${IMAGE_ROOT}")
+fi
+if [[ -n "${MODEL_SCALE}" ]]; then
+  DATASET_ARGS+=(--model-scale "${MODEL_SCALE}")
 fi
 
 IFS=',' read -ra GPU_LIST <<< "${GPUS}"
@@ -84,40 +114,14 @@ run_eval() {
 
   local ckpt_path=""
   if [[ -n "${SAM2_CKPT}" ]]; then
-    if [[ ! -f "${SAM2_CKPT}" ]]; then
-      echo "SAM2_CKPT does not exist: ${SAM2_CKPT}" >&2
-      exit 1
-    fi
     ckpt_path="${SAM2_CKPT}"
   else
-    local primary_ckpt_path="${CKPT_ROOT}/${stage}/log/checkpoints/${ckpt_name}"
-    if [[ -f "${primary_ckpt_path}" ]]; then
-      ckpt_path="${primary_ckpt_path}"
-    elif [[ "${ALLOW_CHECKPOINT_FALLBACK}" == "1" ]]; then
-      local fallback_ckpt_root=""
-      if [[ -n "${COMMENT}" ]]; then
-        fallback_ckpt_root="${FALLBACK_TRAIN_ROOT}/augmentation_restart_${COMMENT}"
-      else
-        fallback_ckpt_root="${FALLBACK_TRAIN_ROOT}/augmentation_restart"
-      fi
-      local fallback_ckpt_path="${fallback_ckpt_root}/${stage}/log/checkpoints/${ckpt_name}"
-      if [[ -f "${fallback_ckpt_path}" ]]; then
-        ckpt_path="${fallback_ckpt_path}"
-      elif [[ -f "${UNSAMV2_OFFICIAL_CKPT}" ]]; then
-        ckpt_path="${UNSAMV2_OFFICIAL_CKPT}"
-      else
-        echo "Checkpoint not found for stage=${stage}. Tried:" >&2
-        echo "  - ${primary_ckpt_path}" >&2
-        echo "  - ${fallback_ckpt_path}" >&2
-        echo "  - ${UNSAMV2_OFFICIAL_CKPT}" >&2
-        exit 1
-      fi
-    else
-      echo "Checkpoint not found: ${primary_ckpt_path}" >&2
-      echo "Fallback is disabled to prevent evaluating the wrong model." >&2
-      echo "Set ALLOW_CHECKPOINT_FALLBACK=1 only when fallback is intentional." >&2
-      exit 1
-    fi
+    ckpt_path="${CKPT_ROOT}/${stage}/log/checkpoints/${ckpt_name}"
+  fi
+  if [[ ! -f "${ckpt_path}" ]]; then
+    echo "Checkpoint not found: ${ckpt_path}" >&2
+    echo "Set SAM2_CKPT to evaluate a specific checkpoint." >&2
+    exit 1
   fi
 
   local ckpt_suffix="${CKPT_SUFFIX}"
@@ -146,7 +150,7 @@ run_eval() {
     CUBLAS_WORKSPACE_CONFIG="${CUBLAS_WORKSPACE_CONFIG:-:4096:8}" \
     PYTHONHASHSEED="${EVAL_SEED}" \
     SAM2_PROFILE="${SAM2_PROFILE}" \
-    python test_det_v2.py \
+    "${PYTHON}" test_det_v2.py \
       --method unsamv2 \
       --seed "${EVAL_SEED}" \
       "${wandb_args[@]}" \
@@ -182,37 +186,3 @@ for stage in "${STAGE_LIST[@]}"; do
   done
 done
 wait
-# python test_det_v2.py --method unsamv2 --dataset det_compass_xp --sam2-ckpt ${CKPT_ROOT}/easy/log/checkpoints/checkpoint.pt --gra 0.15 --eval-mode bbox --start_id 0 --end_id 1928 --comment ${COMMENT_SUFFIX}_easy
-# python test_det_v2.py --method unsamv2 --dataset det_compass_xp --sam2-ckpt ${CKPT_ROOT}/easy/log/checkpoints/checkpoint.pt --gra 0.3 --eval-mode bbox --start_id 0 --end_id 1928 --comment ${COMMENT_SUFFIX}_easy 
-# python test_det_v2.py --method unsamv2 --dataset det_compass_xp --sam2-ckpt ${CKPT_ROOT}/easy/log/checkpoints/checkpoint.pt --gra 0.5 --eval-mode bbox --start_id 0 --end_id 1928 --comment ${COMMENT_SUFFIX}_easy 
-# python test_det_v2.py --method unsamv2 --dataset det_compass_xp --sam2-ckpt ${CKPT_ROOT}/easy/log/checkpoints/checkpoint.pt --gra 1.0 --eval-mode bbox --start_id 0 --end_id 1928 --comment ${COMMENT_SUFFIX}_easy 
-
-# python test_det_v2.py --method unsamv2 --dataset det_compass_xp --sam2-ckpt ${CKPT_ROOT}/hard/log/checkpoints/checkpoint.pt --gra 0.15 --eval-mode bbox --start_id 0 --end_id 1928 --comment ${COMMENT_SUFFIX}_hard
-# python test_det_v2.py --method unsamv2 --dataset det_compass_xp --sam2-ckpt ${CKPT_ROOT}/hard/log/checkpoints/checkpoint.pt --gra 0.3 --eval-mode bbox --start_id 0 --end_id 1928 --comment ${COMMENT_SUFFIX}_hard
-# python test_det_v2.py --method unsamv2 --dataset det_compass_xp --sam2-ckpt ${CKPT_ROOT}/hard/log/checkpoints/checkpoint.pt --gra 0.5 --eval-mode bbox --start_id 0 --end_id 1928 --comment ${COMMENT_SUFFIX}_hard 
-# python test_det_v2.py --method unsamv2 --dataset det_compass_xp --sam2-ckpt ${CKPT_ROOT}/hard/log/checkpoints/checkpoint.pt --gra 0.7 --eval-mode bbox --start_id 0 --end_id 1928 --comment ${COMMENT_SUFFIX}_hard
-# python test_det_v2.py --method unsamv2 --dataset det_compass_xp --sam2-ckpt ${CKPT_ROOT}/hard/log/checkpoints/checkpoint.pt --gra 1.0 --eval-mode bbox --start_id 0 --end_id 1928 --comment ${COMMENT_SUFFIX}_hard
-
-# python test_det_v2.py --method unsamv2 --dataset det_compass_xp --sam2-ckpt ${CKPT_ROOT}/extreme/log/checkpoints/checkpoint.pt --gra 0.15 --eval-mode bbox --start_id 0 --end_id 1928 --comment ${COMMENT_SUFFIX}_extreme
-# python test_det_v2.py --method unsamv2 --dataset det_compass_xp --sam2-ckpt ${CKPT_ROOT}/extreme/log/checkpoints/checkpoint.pt --gra 0.3 --eval-mode bbox --start_id 0 --end_id 1928 --comment ${COMMENT_SUFFIX}_extreme
-# python test_det_v2.py --method unsamv2 --dataset det_compass_xp --sam2-ckpt ${CKPT_ROOT}/extreme/log/checkpoints/checkpoint.pt --gra 0.5 --eval-mode bbox --start_id 0 --end_id 1928 --comment ${COMMENT_SUFFIX}_extreme
-# python test_det_v2.py --method unsamv2 --dataset det_compass_xp --sam2-ckpt ${CKPT_ROOT}/extreme/log/checkpoints/checkpoint.pt --gra 0.7 --eval-mode bbox --start_id 0 --end_id 1928 --comment ${COMMENT_SUFFIX}_extreme
-# python test_det_v2.py --method unsamv2 --dataset det_compass_xp --sam2-ckpt ${CKPT_ROOT}/extreme/log/checkpoints/checkpoint.pt --gra 1.0 --eval-mode bbox --start_id 0 --end_id 1928 --comment ${COMMENT_SUFFIX}_extreme
-
-# python test_det_v2.py --method unsamv2 --dataset det_compass_syn_100 --sam2-ckpt ${CKPT_ROOT}/easy/log/checkpoints/checkpoint.pt --gra 0.15 --eval-mode bbox --start_id 0 --end_id 100 --comment ${COMMENT_SUFFIX}_easy
-# python test_det_v2.py --method unsamv2 --dataset det_compass_syn_100 --sam2-ckpt ${CKPT_ROOT}/easy/log/checkpoints/checkpoint.pt --gra 0.3 --eval-mode bbox --start_id 0 --end_id 100 --comment ${COMMENT_SUFFIX}_easy 
-# python test_det_v2.py --method unsamv2 --dataset det_compass_syn_100 --sam2-ckpt ${CKPT_ROOT}/easy/log/checkpoints/checkpoint.pt --gra 0.5 --eval-mode bbox --start_id 0 --end_id 100 --comment ${COMMENT_SUFFIX}_easy 
-# python test_det_v2.py --method unsamv2 --dataset det_compass_syn_100 --sam2-ckpt ${CKPT_ROOT}/easy/log/checkpoints/checkpoint.pt --gra 0.7 --eval-mode bbox --start_id 0 --end_id 100 --comment ${COMMENT_SUFFIX}_easy 
-# python test_det_v2.py --method unsamv2 --dataset det_compass_syn_100 --sam2-ckpt ${CKPT_ROOT}/easy/log/checkpoints/checkpoint.pt --gra 1.0 --eval-mode bbox --start_id 0 --end_id 100 --comment ${COMMENT_SUFFIX}_easy 
-
-# python test_det_v2.py --method unsamv2 --dataset det_compass_syn_100 --sam2-ckpt ${CKPT_ROOT}/hard/log/checkpoints/checkpoint.pt --gra 0.15 --eval-mode bbox --start_id 0 --end_id 100 --comment ${COMMENT_SUFFIX}_hard
-# python test_det_v2.py --method unsamv2 --dataset det_compass_syn_100 --sam2-ckpt ${CKPT_ROOT}/hard/log/checkpoints/checkpoint.pt --gra 0.3 --eval-mode bbox --start_id 0 --end_id 100 --comment ${COMMENT_SUFFIX}_hard
-# python test_det_v2.py --method unsamv2 --dataset det_compass_syn_100 --sam2-ckpt ${CKPT_ROOT}/hard/log/checkpoints/checkpoint.pt --gra 0.5 --eval-mode bbox --start_id 0 --end_id 100 --comment ${COMMENT_SUFFIX}_hard 
-# python test_det_v2.py --method unsamv2 --dataset det_compass_syn_100 --sam2-ckpt ${CKPT_ROOT}/hard/log/checkpoints/checkpoint.pt --gra 0.7 --eval-mode bbox --start_id 0 --end_id 100 --comment ${COMMENT_SUFFIX}_hard
-# python test_det_v2.py --method unsamv2 --dataset det_compass_syn_100 --sam2-ckpt ${CKPT_ROOT}/hard/log/checkpoints/checkpoint.pt --gra 1.0 --eval-mode bbox --start_id 0 --end_id 100 --comment ${COMMENT_SUFFIX}_hard
-
-# python test_det_v2.py --method unsamv2 --dataset det_compass_syn_100 --sam2-ckpt ${CKPT_ROOT}/extreme/log/checkpoints/checkpoint.pt --gra 0.15 --eval-mode bbox --start_id 0 --end_id 100 --comment ${COMMENT_SUFFIX}_extreme
-# python test_det_v2.py --method unsamv2 --dataset det_compass_syn_100 --sam2-ckpt ${CKPT_ROOT}/extreme/log/checkpoints/checkpoint.pt --gra 0.3 --eval-mode bbox --start_id 0 --end_id 100 --comment ${COMMENT_SUFFIX}_extreme
-# python test_det_v2.py --method unsamv2 --dataset det_compass_syn_100 --sam2-ckpt ${CKPT_ROOT}/extreme/log/checkpoints/checkpoint.pt --gra 0.5 --eval-mode bbox --start_id 0 --end_id 100 --comment ${COMMENT_SUFFIX}_extreme
-# python test_det_v2.py --method unsamv2 --dataset det_compass_syn_100 --sam2-ckpt ${CKPT_ROOT}/extreme/log/checkpoints/checkpoint.pt --gra 0.7 --eval-mode bbox --start_id 0 --end_id 100 --comment ${COMMENT_SUFFIX}_extreme
-# python test_det_v2.py --method unsamv2 --dataset det_compass_syn_100 --sam2-ckpt ${CKPT_ROOT}/extreme/log/checkpoints/checkpoint.pt --gra 1.0 --eval-mode bbox --start_id 0 --end_id 100 --comment ${COMMENT_SUFFIX}_extreme

@@ -4,6 +4,13 @@
 The script reports TP, FP, FN, precision, recall, F1, and false discovery
 rate (FP / (TP + FP)). Classical FPR is intentionally not reported because
 object detection has no finite, well-defined set of true-negative windows.
+
+Paths: annotations are read from ``$LAOX_DATA_ROOT`` (default ``<repo>/datasets``);
+saved predictions from ``$LAOX_OUTPUT_EVAL`` (default ``<repo>/output_eval``,
+where ``test_det_v2.py`` writes them); SAM 3 predictions from
+``$SAM3_OUTPUT_EVAL`` (default: same as ``$LAOX_OUTPUT_EVAL``). Reports go to
+``$LAOX_RESULTS_ROOT/analysis/`` (default ``<repo>/results``) unless
+``--output-dir`` is given.
 """
 
 from __future__ import annotations
@@ -12,6 +19,7 @@ import argparse
 import csv
 import json
 import math
+import os
 from collections import defaultdict
 from pathlib import Path
 from typing import Any
@@ -21,10 +29,11 @@ from pycocotools.coco import COCO
 from pycocotools.cocoeval import COCOeval
 
 
-DATA_ROOT = Path("/path/to/datasets")
-PROJECT_ROOT = Path("/path/to/LAO-X")
-RESULT_ROOT = Path("/path/to/results/output_eval")
-SAM3_ROOT = Path("/path/to/sam3/output_eval")
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+DATA_ROOT = Path(os.environ.get("LAOX_DATA_ROOT", PROJECT_ROOT / "datasets"))
+RESULT_ROOT = Path(os.environ.get("LAOX_OUTPUT_EVAL", PROJECT_ROOT / "output_eval"))
+SAM3_ROOT = Path(os.environ.get("SAM3_OUTPUT_EVAL", RESULT_ROOT))
+RESULTS_ROOT = Path(os.environ.get("LAOX_RESULTS_ROOT", PROJECT_ROOT / "results"))
 
 DATASETS = {
     "DET-COMPASS": {
@@ -89,8 +98,7 @@ EXPERIMENTS = {
     },
     ("DET-COMPASS", "UnSAMv2"): {
         "granularity": "1.0",
-        "prediction": PROJECT_ROOT
-        / "output_eval"
+        "prediction": RESULT_ROOT
         / (
             "det_compass_xp_img0_307_unsamv2_1.0_augmentation_restart_"
             "crop_musc_aug_fusion_bs16_xp_extreme_m0.5_48"
@@ -99,8 +107,7 @@ EXPERIMENTS = {
     },
     ("CLCXray", "UnSAMv2"): {
         "granularity": "1.0",
-        "prediction": PROJECT_ROOT
-        / "output_eval"
+        "prediction": RESULT_ROOT
         / (
             "clcxray_img0_956_unsamv2_1.0_augmentation_restart_"
             "crop_musc_aug_fusion_bs16_xp_extreme_m0.5_48"
@@ -452,7 +459,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--output-dir",
         type=Path,
-        default=PROJECT_ROOT / "analysis" / "protocol_false_positives",
+        default=RESULTS_ROOT / "analysis" / "protocol_false_positives",
     )
     parser.add_argument(
         "--iou-thresholds",

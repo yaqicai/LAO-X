@@ -30,6 +30,12 @@ else
   conda env create -n "${ENV_NAME}" -f "${YAML}"
 fi
 
+if [[ "${PROFILE}" == "5090" ]]; then
+  # The 5090 environment ships its own CUDA toolkit; point CUDA_HOME at it.
+  ENV_PREFIX="$(conda run -n "${ENV_NAME}" printenv CONDA_PREFIX)"
+  conda env config vars set -n "${ENV_NAME}" CUDA_HOME="${ENV_PREFIX}" >/dev/null
+fi
+
 conda run --no-capture-output -n "${ENV_NAME}" \
   python -m pip install --no-deps --no-build-isolation "${DETECTRON2}"
 conda run --no-capture-output -n "${ENV_NAME}" \

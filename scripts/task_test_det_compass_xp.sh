@@ -1,13 +1,24 @@
+#!/usr/bin/env bash
+# Evaluate a single-run UnSAMv2 model trained directly on DET-COMPASS pseudo-labels
+# (sam2/training/train.sh configs/unsamv2_small_training_det_compass_xp*.yaml).
+#
+# Usage: [VAR=value ...] bash scripts/task_test_det_compass_xp.sh [RUN_NAME]
+# Checkpoint: ${TRAIN_ROOT}/det_compass_xp_<RUN_NAME>/log/checkpoints/checkpoint.pt
+# (TRAIN_ROOT default ${LAOX_RESULTS_ROOT}/train), e.g. RUN_NAME=divide_and_conquer_1000_clean
+# for configs/unsamv2_small_training_det_compass_xp.yaml.
+# Environment: DATASET [det_compass_xp], GRAS [0.1,...,1.0], GPUS [0],
+# MASK_THRESHOLD [0], START_ID [0], END_ID [full test split], PYTHON [python].
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 cd "${REPO_ROOT}"
+PYTHON="${PYTHON:-python}"
+LAOX_RESULTS_ROOT="${LAOX_RESULTS_ROOT:-${REPO_ROOT}/results}"
+TRAIN_ROOT="${TRAIN_ROOT:-${LAOX_RESULTS_ROOT}/train}"
 COMMENT="${1:-}"
-
 
 DATASET="${DATASET:-det_compass_xp}"
 START_ID="${START_ID:-0}"
 MASK_THRESHOLD="${MASK_THRESHOLD:-0}"
-# END_ID="${END_ID:-1928}"
 if [[ -z "${END_ID}" ]]; then
   case "${DATASET}" in
     det_compass_xp) END_ID=307 ;;
@@ -21,7 +32,6 @@ if [[ -z "${END_ID}" ]]; then
 fi
 SAM2_PROFILE="${SAM2_PROFILE:-0}"
 GPUS="${GPUS:-0}"
-# GRAS="${GRAS:-0.9,1.0}"
 GRAS="${GRAS:-0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1.0}"
 
 IFS=',' read -ra GPU_LIST <<< "${GPUS}"
@@ -34,10 +44,10 @@ if [[ "${NUM_GPUS}" -le 0 ]]; then
 fi
 
 if [[ -n "${COMMENT}" ]]; then
-  CKPT_ROOT="results/train/det_compass_xp_${COMMENT}"
+  CKPT_ROOT="${TRAIN_ROOT}/det_compass_xp_${COMMENT}"
   COMMENT_SUFFIX="_det_compass_xp_${COMMENT}_m${MASK_THRESHOLD}"
 else
-  CKPT_ROOT="results/train/det_compass_xp"
+  CKPT_ROOT="${TRAIN_ROOT}/det_compass_xp"
   COMMENT_SUFFIX="_det_compass_xp"
 fi
 
@@ -48,7 +58,7 @@ run_eval() {
   echo "[eval] dataset=${DATASET} gra=${gra} gpu=${gpu} ckpt=${ckpt_path}"
   CUDA_VISIBLE_DEVICES="${gpu}" \
     SAM2_PROFILE="${SAM2_PROFILE}" \
-    python test_det_v2.py \
+    "${PYTHON}" test_det_v2.py \
       --method unsamv2 \
       --dataset "${DATASET}" \
       --sam2-ckpt "${ckpt_path}" \
@@ -74,21 +84,3 @@ for gra in "${GRA_LIST[@]}"; do
   fi
 done
 wait
-
-# python test_det_v2.py --method unsamv2 --dataset det_compass_syn_100 --sam2-ckpt ${CKPT_ROOT}/easy/log/checkpoints/checkpoint.pt --gra 0.15 --eval-mode bbox --start_id 0 --end_id 100 --comment ${COMMENT_SUFFIX}_easy
-# python test_det_v2.py --method unsamv2 --dataset det_compass_syn_100 --sam2-ckpt ${CKPT_ROOT}/easy/log/checkpoints/checkpoint.pt --gra 0.3 --eval-mode bbox --start_id 0 --end_id 100 --comment ${COMMENT_SUFFIX}_easy 
-# python test_det_v2.py --method unsamv2 --dataset det_compass_syn_100 --sam2-ckpt ${CKPT_ROOT}/easy/log/checkpoints/checkpoint.pt --gra 0.5 --eval-mode bbox --start_id 0 --end_id 100 --comment ${COMMENT_SUFFIX}_easy 
-# python test_det_v2.py --method unsamv2 --dataset det_compass_syn_100 --sam2-ckpt ${CKPT_ROOT}/easy/log/checkpoints/checkpoint.pt --gra 0.7 --eval-mode bbox --start_id 0 --end_id 100 --comment ${COMMENT_SUFFIX}_easy 
-# python test_det_v2.py --method unsamv2 --dataset det_compass_syn_100 --sam2-ckpt ${CKPT_ROOT}/easy/log/checkpoints/checkpoint.pt --gra 1.0 --eval-mode bbox --start_id 0 --end_id 100 --comment ${COMMENT_SUFFIX}_easy 
-
-# python test_det_v2.py --method unsamv2 --dataset det_compass_syn_100 --sam2-ckpt ${CKPT_ROOT}/hard/log/checkpoints/checkpoint.pt --gra 0.15 --eval-mode bbox --start_id 0 --end_id 100 --comment ${COMMENT_SUFFIX}_hard
-# python test_det_v2.py --method unsamv2 --dataset det_compass_syn_100 --sam2-ckpt ${CKPT_ROOT}/hard/log/checkpoints/checkpoint.pt --gra 0.3 --eval-mode bbox --start_id 0 --end_id 100 --comment ${COMMENT_SUFFIX}_hard
-# python test_det_v2.py --method unsamv2 --dataset det_compass_syn_100 --sam2-ckpt ${CKPT_ROOT}/hard/log/checkpoints/checkpoint.pt --gra 0.5 --eval-mode bbox --start_id 0 --end_id 100 --comment ${COMMENT_SUFFIX}_hard 
-# python test_det_v2.py --method unsamv2 --dataset det_compass_syn_100 --sam2-ckpt ${CKPT_ROOT}/hard/log/checkpoints/checkpoint.pt --gra 0.7 --eval-mode bbox --start_id 0 --end_id 100 --comment ${COMMENT_SUFFIX}_hard
-# python test_det_v2.py --method unsamv2 --dataset det_compass_syn_100 --sam2-ckpt ${CKPT_ROOT}/hard/log/checkpoints/checkpoint.pt --gra 1.0 --eval-mode bbox --start_id 0 --end_id 100 --comment ${COMMENT_SUFFIX}_hard
-
-# python test_det_v2.py --method unsamv2 --dataset det_compass_syn_100 --sam2-ckpt ${CKPT_ROOT}/extreme/log/checkpoints/checkpoint.pt --gra 0.15 --eval-mode bbox --start_id 0 --end_id 100 --comment ${COMMENT_SUFFIX}_extreme
-# python test_det_v2.py --method unsamv2 --dataset det_compass_syn_100 --sam2-ckpt ${CKPT_ROOT}/extreme/log/checkpoints/checkpoint.pt --gra 0.3 --eval-mode bbox --start_id 0 --end_id 100 --comment ${COMMENT_SUFFIX}_extreme
-# python test_det_v2.py --method unsamv2 --dataset det_compass_syn_100 --sam2-ckpt ${CKPT_ROOT}/extreme/log/checkpoints/checkpoint.pt --gra 0.5 --eval-mode bbox --start_id 0 --end_id 100 --comment ${COMMENT_SUFFIX}_extreme
-# python test_det_v2.py --method unsamv2 --dataset det_compass_syn_100 --sam2-ckpt ${CKPT_ROOT}/extreme/log/checkpoints/checkpoint.pt --gra 0.7 --eval-mode bbox --start_id 0 --end_id 100 --comment ${COMMENT_SUFFIX}_extreme
-# python test_det_v2.py --method unsamv2 --dataset det_compass_syn_100 --sam2-ckpt ${CKPT_ROOT}/extreme/log/checkpoints/checkpoint.pt --gra 1.0 --eval-mode bbox --start_id 0 --end_id 100 --comment ${COMMENT_SUFFIX}_extreme

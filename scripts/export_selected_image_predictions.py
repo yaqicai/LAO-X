@@ -13,8 +13,8 @@ if REPO_ROOT not in sys.path:
 from config import XrayImgRoot, XrayRoot
 
 
-DEFAULT_OUTPUT_EVAL_DIR = "/path/to/results/output_eval"
-DEFAULT_OUTPUT_EVAL_DIR_SAM3 = "/path/to/sam3/output_eval"
+DEFAULT_OUTPUT_EVAL_DIR = os.environ.get("LAOX_OUTPUT_EVAL", os.path.join(REPO_ROOT, "output_eval"))
+DEFAULT_OUTPUT_EVAL_DIR_SAM3 = os.environ.get("SAM3_OUTPUT_EVAL", DEFAULT_OUTPUT_EVAL_DIR)
 
 DEFAULT_DATASETS = ["CLCXray", "DvXray", "PIXray", "HiXray", "pidray"]
 DEFAULT_VIS_IMAGE_IDS_MATRIX = (

@@ -1,12 +1,24 @@
 #!/usr/bin/env bash
+# Draw ground-truth and predicted masks/boxes for saved test_det_v2.py
+# predictions (output_eval/<dataset>_img<start>_<end>_unsamv2_<gra><suffix>/).
+#
+# Usage: [VAR=value ...] bash scripts/run_eval_vis.sh
+#   SUFFIXES         comma-separated run suffixes [_augmentation_restart_crop_musc_aug_fusion_bs16_extreme_m0_48]
+#   DATASETS         comma-separated datasets [PIXray]
+#   GRAS             granularities used for every dataset [0.1]
+#   GRAS_BY_DATASET  optional comma-separated gra per dataset, aligned with DATASETS [1.0]
+#   ROOT             dataset root [${LAOX_DATA_ROOT:-<repo>/datasets}]
+#   OUTPUT_ROOT      prediction root [${LAOX_OUTPUT_EVAL:-<repo>/output_eval}]
+#   START_ID [0], END_ID [full test split], MAX_VIS [0 = all], SCORE_THRESH [0.0],
+#   VIS_GT [1], PYTHON [python]
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 cd "${REPO_ROOT}"
 
-ROOT="${ROOT:-/path/to/datasets}"
-OUTPUT_ROOT="${OUTPUT_ROOT:-/path/to/LAO-X/output_eval}"
+ROOT="${ROOT:-${LAOX_DATA_ROOT:-${REPO_ROOT}/datasets}}"
+OUTPUT_ROOT="${OUTPUT_ROOT:-${LAOX_OUTPUT_EVAL:-${REPO_ROOT}/output_eval}}"
 
 START_ID="${START_ID:-0}"
 END_ID="${END_ID:-}"
@@ -15,32 +27,9 @@ MAX_VIS="${MAX_VIS:-0}"
 SCORE_THRESH="${SCORE_THRESH:-0.0}"
 VIS_GT="${VIS_GT:-1}"
 
-SUFFIXES=(
-  # "_augmentation_restart_crop_musc_aug_fusion_bs16_easy_80"
-  # "_augmentation_restart_crop_musc_aug_fusion_bs16_hard_64"
-  # "_augmentation_restart_crop_musc_aug_fusion_bs16_extreme_48"
-  "_augmentation_restart_crop_musc_aug_fusion_bs16_extreme_m0_48"
-)
-
-DATASETS=(
-  # det_compass_xp
-  # CLCXray
-  # DvXray
-  PIXray
-  # HiXray
-  # pidray
-)
-
-# Optional per-dataset gra list (must align with DATASETS order).
-# Example: GRAS_BY_DATASET=(0.1 0.2 0.3 0.1 0.1 0.1)
-GRAS_BY_DATASET=(
-  # 1.0
-  1.0
-  # 1.0
-  # 0.6
-  # 0.3
-  # 1.0
-)
+IFS=',' read -ra SUFFIXES <<< "${SUFFIXES:-_augmentation_restart_crop_musc_aug_fusion_bs16_extreme_m0_48}"
+IFS=',' read -ra DATASETS <<< "${DATASETS:-PIXray}"
+IFS=',' read -ra GRAS_BY_DATASET <<< "${GRAS_BY_DATASET-1.0}"
 
 get_end_id() {
   local dataset="$1"
@@ -142,7 +131,7 @@ for SUFFIX in "${SUFFIXES[@]}"; do
       mkdir -p "${VIS_DIR}"
 
       TEMP_JSON="${DATA_ROOT}/temp_${DATASET}_val_${START_ID}_${DATASET_END_ID}.json"
-      python - "${COCO_JSON}" "${START_ID}" "${DATASET_END_ID}" "${TEMP_JSON}" <<'PY'
+      "${PYTHON:-python}" - "${COCO_JSON}" "${START_ID}" "${DATASET_END_ID}" "${TEMP_JSON}" <<'PY'
 import json
 import sys
 
@@ -165,7 +154,7 @@ with open(out_json, "w", encoding="utf-8") as f:
 print(out_json)
 PY
 
-      python - "${TEMP_JSON}" "${PRED_JSON}" "${DEFAULT_IMAGE_ROOT}" "${VIS_DIR}" "${MAX_VIS}" "${SCORE_THRESH}" "${VIS_GT}" <<'PY'
+      "${PYTHON:-python}" - "${TEMP_JSON}" "${PRED_JSON}" "${DEFAULT_IMAGE_ROOT}" "${VIS_DIR}" "${MAX_VIS}" "${SCORE_THRESH}" "${VIS_GT}" <<'PY'
 import json
 import os
 import random

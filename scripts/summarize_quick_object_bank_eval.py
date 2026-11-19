@@ -16,12 +16,11 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
+from config import XrayRoot
 from util_xray import _apply_region_protocol, _get_protocol_preset, _slice_coco_json
 
 
-DEFAULT_ANNOTATION = Path(
-    "/path/to/datasets/CLCXray/annotations/coco_agnostic.json"
-)
+DEFAULT_ANNOTATION = Path(XrayRoot["CLCXray"]) / "annotations" / "coco_agnostic.json"
 
 
 def parse_args():

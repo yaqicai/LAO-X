@@ -311,5 +311,4 @@ dependencies:
       - zipp==3.23.0
 variables:
   UNSAMV2_USE_INSTALLED_SAM2: '1'
-  CUDA_HOME: /path/to/conda/envs/UnSAMv2_5090
   TORCH_CUDA_ARCH_LIST: '12.0'

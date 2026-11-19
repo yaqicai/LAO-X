@@ -5,6 +5,11 @@ import os
 from pathlib import Path
 import shutil
 
+# LAO-X repository root (sam2/training/scripts/ -> repo).
+REPO_ROOT = Path(__file__).resolve().parents[3]
+DATA_ROOT = os.environ.get("LAOX_DATA_ROOT", str(REPO_ROOT / "datasets"))
+RESULTS_ROOT = os.environ.get("LAOX_RESULTS_ROOT", str(REPO_ROOT / "results"))
+
 
 def load_exclude_stems(coco_json_path: Path) -> set[str]:
     with coco_json_path.open("r", encoding="utf-8") as f:
@@ -59,21 +64,21 @@ def main() -> None:
     )
     parser.add_argument(
         "--src-dir",
-        default=(
-            "/path/to/LAO-X/results/cutler/det_compass_xp/granularity_divide_and_conquer_1000/vis"
+        default=os.path.join(
+            RESULTS_ROOT, "cutler/det_compass_xp/granularity_divide_and_conquer_1000/vis"
         ),
         help="Source directory that contains annotation files.",
     )
     parser.add_argument(
         "--dst-dir",
-        default=(
-            "/path/to/LAO-X/results/cutler/det_compass_xp/granularity_divide_and_conquer_1000_clean/vis"
+        default=os.path.join(
+            RESULTS_ROOT, "cutler/det_compass_xp/granularity_divide_and_conquer_1000_clean/vis"
         ),
         help="Destination directory for filtered annotation files.",
     )
     parser.add_argument(
         "--coco-json",
-        default="/path/to/datasets/det_compass_xp/coco_agnostic.json",
+        default=os.path.join(DATA_ROOT, "det_compass_xp/coco_agnostic.json"),
         help="COCO JSON annotation file containing test-set images.",
     )
     parser.add_argument(

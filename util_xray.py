@@ -1,16 +1,21 @@
+"""COCO / X-ray utilities shared by LAO-X.
+
+- Pseudo-label generation: ``convert_to_class_agnostic``, ``generate_anno_per_image``
+  (used by ``pseudo_label_generate.py``).
+- Evaluation: region protocols (``_get_protocol_preset``, ``_apply_region_protocol``),
+  ``evaluate_output_eval_metrics``, ``export_interactive_eval_metrics``, per-image AP
+  helpers and ``visualization_select`` (used by ``scripts/``).
+
+Class-agnostic conversion from the command line:
+``python pseudo_label_generate.py --to-agnostic <coco.json>``.
+"""
 import os
-import shutil
 import cv2
 import json
 import datetime
-from tqdm import tqdm
 import numpy as np
-import random
 from collections import defaultdict
 from pycocotools import mask as mask_utils
-import matplotlib
-matplotlib.use("Agg")
-import matplotlib.pyplot as plt
 import pandas as pd
 
 # Shared COCO defaults
@@ -35,135 +40,6 @@ DEFAULT_CATEGORIES = [
     }
 ]
 
-# from datasets import load_dataset
-
-
-def split_train_val(
-        json_path_full, 
-        json_path_agnostic, 
-        val_ratio=0.5, 
-        random_split=False, 
-        seed=0, 
-        mode="w/o_invisible", 
-        localizer=False, 
-        old_classes=None, 
-        new_classes=None, 
-        dataset=None):
-    """
-    将 COCO 格式的标注文件划分为 train.json 和 val.json
-
-    Args:
-        json_path (str): 原始 COCO json 文件路径
-        val_ratio (float): 验证集比例 (0-1)
-        random_split (bool): 是否随机划分，默认 False（顺序划分）
-        seed (int): 随机种子（仅在 random_split=True 时生效）
-
-    Returns:
-        tuple: (train_json_path, val_json_path)
-    """
-    json_path_v1 = '/path/to/datasets/det_compass_syn/default_coco_xray_v1.json'
-    json_path_v1_PIXray = '/path/to/datasets/PIXray/default_coco_xray_v1.json'
-    # 'Bat':球棒, 10 baseball bat
-    # 'Battery':电池,  
-    # 'Dart':镖, 不存在
-    # 'Fireworks':烟花, 不存在
-    # 'Gun':枪, 不存在
-    # 'Hammer':锤, 110 hammer; 150 mallet
-    # 'Knife':刀, 28 box cutter, 31 bread knife, 39 can opener, 44 carving knife, 71 craft knife, 76 dagger, 132 knife, 181 penknife
-    # 'Lighter':打火机, 142 lighter
-    # 'Pliers':钳子, 190 pliers
-    # 'Pressure_vessel'压力容器:, 101 gas canister
-    # 'Razor_blade':剃须刀片, 204 razor blades
-    # 'Saw_blade':锯片, 105 hacksaw, 224 saw
-    # 'Scissors':剪刀, 227 scissors
-    # 'Screwdriver':螺丝刀, 229 screwdriver
-    # 'Wrench':扳手 310 wrench
-    # [10,28,31,39,44,71,76,101,105,110,132,142,150,181,190,204,224,227,229,310] 一共20个同义物品，刚好前110个类包含10个同义物品
-    with open(json_path_full, "r", encoding="utf-8") as f:
-        coco = json.load(f)
-    with open(json_path_agnostic, "r", encoding="utf-8") as f:
-        coco_agnostic = json.load(f)
-    categories_pixry_in_det_compass_syn = [10,28,31,39,44,71,76,101,105,110]
-    old_classes = set(old_classes) - set(categories_pixry_in_det_compass_syn)
-    images = coco["images"]
-    annotations = coco["annotations"]
-    categories = coco["categories"]
-    annotations_agnostic = coco_agnostic["annotations"]
-    categories_agnostic = coco_agnostic["categories"]
-
-    # 确保排序一致（避免不同运行结果不一样）
-    images = sorted(images, key=lambda x: x["id"])
-
-    n_total = len(images)
-    n_val = int(n_total * val_ratio)
-    if dataset == 'PIXray':
-        val_images = images
-        train_images = images
-    else:
-        if random_split:
-            random.seed(seed)
-            val_images = random.sample(images, n_val)
-        
-
-        else:
-            val_images = images[-n_val:]  # 取最后 val_ratio 部分
-        train_images = [img for img in images if img not in val_images]
-
-    # 获取 image_id 列表
-    train_ids = set(img["id"] for img in train_images)
-    val_ids = set(img["id"] for img in val_images)
-
-    # 按 image_id 筛选 annotations
-    train_annotations = [ann for ann in annotations if ann["image_id"] in train_ids
-                         and ann['category_id'] in old_classes]
-    val_annotations = [ann for ann in annotations if ann["image_id"] in val_ids
-                       and ann['category_id'] not in old_classes]
-    val_annotations_agnostic = [ann for ann in annotations_agnostic if ann["image_id"] in val_ids]
-    train_images_id = set([ann['image_id'] for ann in train_annotations])
-    train_images = [img for img in train_images if img['id'] in train_images_id]
-    for anno in train_annotations:
-        anno['category_id'] = 1
-    for anno in val_annotations:
-        anno['category_id'] = 1
-    # for anno in val_annotations_agnostic:
-    #     anno['category_id'] = 1
-        # anno['id'] += len(val_annotations)
-    # val_annotations_agnostic = val_annotations + val_annotations_agnostic
-    
-    # val_categories = categories + [{'id': 313, 'name': 'object'}]
-    val_categories = categories_agnostic
-    # 组装 COCO 格式
-    train_coco = {
-        "images": train_images,
-        "annotations": train_annotations,
-        "categories": categories_agnostic
-    }
-
-    val_coco = {
-        "images": val_images,
-        "annotations": val_annotations_agnostic if dataset == 'PIXray' else val_annotations,
-        "categories": val_categories
-    }
-    for key in coco.keys():
-        if key not in ["images", "annotations", "categories"]:
-            train_coco[key] = coco[key]
-            val_coco[key] = coco[key]
-    
-
-    # 保存到文件
-    base_dir = os.path.dirname(json_path_full)
-    train_json_path = os.path.join(base_dir, "train.json")
-    val_json_path = os.path.join(base_dir, "val.json")
-
-    with open(train_json_path, "w", encoding="utf-8") as f:
-        json.dump(train_coco, f, ensure_ascii=False, indent=2)
-    with open(val_json_path, "w", encoding="utf-8") as f:
-        json.dump(val_coco, f, ensure_ascii=False, indent=2)
-
-    print(f"训练集: {len(train_images)} 张, 验证集: {len(val_images)} 张")
-    print(f"保存到 {train_json_path} 和 {val_json_path}")
-
-    return train_json_path, val_json_path
 
 def convert_to_class_agnostic(save_dir=None):
     if not save_dir.endswith("json"):
@@ -291,27 +167,6 @@ def _ann_to_rle(ann, height, width):
     return None
 
 
-def _ann_area_from_rle(ann, rle):
-    area = ann.get("area")
-    if area is not None:
-        try:
-            return float(area)
-        except (TypeError, ValueError):
-            pass
-    if rle is None:
-        return None
-    return float(mask_utils.area(rle))
-
-
-def _ann_bbox_from_rle(ann, rle):
-    bbox = ann.get("bbox")
-    if bbox is not None:
-        return bbox
-    if rle is None:
-        return None
-    return mask_utils.toBbox(rle).tolist()
-
-
 def _bbox_iou_from_xyxy(ax1, ay1, ax2, ay2, bx1, by1, bx2, by2):
     inter_x1 = max(ax1, bx1)
     inter_y1 = max(ay1, by1)
@@ -328,12 +183,6 @@ def _bbox_iou_from_xyxy(ax1, ay1, ax2, ay2, bx1, by1, bx2, by2):
 
 def _bbox_iou(a, b):
     return _bbox_iou_xywh(a, b)
-
-
-def _bbox_iou_xyxy(a, b):
-    ax1, ay1, ax2, ay2 = a
-    bx1, by1, bx2, by2 = b
-    return _bbox_iou_from_xyxy(ax1, ay1, ax2, ay2, bx1, by1, bx2, by2)
 
 
 def _bbox_iou_xywh(a, b):
@@ -1350,7 +1199,6 @@ def evaluate_output_eval_metrics(
     writer_kwargs = {"engine": "openpyxl", "mode": writer_mode}
     if writer_mode == "a":
         writer_kwargs["if_sheet_exists"] = "replace"
-    # print("dataset {} end_id {}".format(dataset, end_id))
     try:
         writer = pd.ExcelWriter(output_path, **writer_kwargs)
     except Exception:
@@ -1822,40 +1670,6 @@ def merge_image_ap_by_suffix(
     return merged
 
 
-def select_image_ids_by_ap(
-    dataset,
-    suffix,
-    gra,
-    model_name="unsamv2",
-    start_id=0,
-    end_id=None,
-    output_eval_dir="./output_eval",
-    output_eval_dir_override=None,
-    ap_value=1.0,
-    tol=1e-6,
-    region_protocol=None,
-    region_protocol_preset=None,
-):
-    """Return image_ids whose AP is close to ap_value for the given model/suffix/gra."""
-    eval_dir = output_eval_dir_override or output_eval_dir
-    df = evaluate_output_eval_bbox_image_ap(
-        dataset=dataset,
-        suffix=suffix,
-        gra=gra,
-        model_name=model_name,
-        start_id=start_id,
-        end_id=end_id,
-        output_eval_dir=eval_dir,
-        output_path=None,
-        region_protocol=region_protocol,
-        region_protocol_preset=region_protocol_preset,
-    )
-    if "AP" not in df.columns:
-        return []
-    mask, _ap = _ap_close_mask(df["AP"], ap_value=ap_value, tol=tol)
-    return df.loc[mask, "image_id"].astype(int).tolist()
-
-
 def select_image_ids_by_ap_gap(
     merged_df,
     first_method_col,
@@ -2070,33 +1884,6 @@ def _color_from_hue_index(index, step=67, saturation=255, value=255):
     return (int(bgr[0]), int(bgr[1]), int(bgr[2]))
 
 
-def _score_vis_palette_bgr():
-    return [
-        (0, 255, 255),   # yellow
-        (255, 0, 255),   # magenta
-        (0, 255, 0),     # green
-        (255, 128, 0),   # blue/orange
-        (255, 255, 0),   # cyan
-        (0, 128, 255),   # orange
-        (128, 0, 255),   # purple
-        (0, 255, 128),   # spring green
-        (255, 0, 128),   # pink
-        (128, 255, 0),   # lime
-    ]
-
-
-def _method_topk_palette_bgr():
-    """Fixed bright colors for method-level top-k visualization."""
-    return [
-        (0, 255, 255),   # yellow
-        (255, 0, 255),   # magenta
-        (255, 255, 0),   # cyan
-        (0, 255, 0),     # green
-        (0, 128, 255),   # orange
-        (255, 0, 128),   # pink
-    ]
-
-
 def _draw_text_panel_top_left(
     img_bgr,
     lines,
@@ -2210,18 +1997,6 @@ def _compose_topk_mask_panel(
             )
         panel[y0 : y0 + tile_h, x0 : x0 + tile_w] = tile
     return panel
-
-
-def _build_shared_topn_palette(topn):
-    topn = max(1, int(topn))
-    base = list(_score_vis_palette_bgr())
-    if topn <= len(base):
-        return base[:topn]
-    extra = []
-    start = len(base)
-    for idx in range(topn - len(base)):
-        extra.append(_color_from_hue_index(start + idx))
-    return base + extra
 
 
 def _compose_ranked_mask_overlay(
@@ -2663,418 +2438,3 @@ def visualization_select(
                         )
                         grouped_path = os.path.join(output_dir, grouped_name)
                         _write_image_if_needed(grouped_path, grouped_crop, skip_existing=skip_existing)
-
-
-def compare_coco_annotations(
-    ori_json_path,
-    musc_json_path,
-    min_iou=0.0,
-    output_path=None,
-    max_area=150000.0,
-    only_best=True,
-    max_musc_area=150000.0,
-):
-    with open(ori_json_path, "r", encoding="utf-8") as f:
-        coco_ori = json.load(f)
-    with open(musc_json_path, "r", encoding="utf-8") as f:
-        coco_musc = json.load(f)
-
-    images_ori = {img["id"]: img for img in coco_ori.get("images", [])}
-    images_musc = {img["id"]: img for img in coco_musc.get("images", [])}
-
-    ann_musc_by_image = {}
-    for ann in coco_musc.get("annotations", []):
-        ann_musc_by_image.setdefault(ann.get("image_id"), []).append(ann)
-
-    header = [
-        "image_id",
-        "ori_ann_id",
-        "best_musc_id",
-        "mask_iou",
-        "bbox_iou",
-        "area_ori",
-        "area_musc",
-        "area_ratio",
-    ]
-    lines = ["\t".join(header)]
-
-    stats = {"total": 0, "matched": 0}
-    best_by_image = {}
-
-    for ann in tqdm(coco_ori.get("annotations", []), desc="compare_coco"):
-        image_id = ann.get("image_id")
-        image = images_ori.get(image_id) or images_musc.get(image_id)
-        if image is None:
-            continue
-        height = image.get("height")
-        width = image.get("width")
-        if height is None or width is None:
-            continue
-
-        rle_ori = _ann_to_rle(ann, height, width)
-        if rle_ori is None:
-            continue
-        area_ori = _ann_area_from_rle(ann, rle_ori)
-        if area_ori is None:
-            continue
-        if area_ori > max_area:
-            continue
-        musc_anns = ann_musc_by_image.get(image_id, [])
-        if not musc_anns:
-            continue
-
-        rles_musc = []
-        valid_musc = []
-        for m_ann in musc_anns:
-            rle_musc = _ann_to_rle(m_ann, height, width)
-            if rle_musc is None:
-                continue
-            area_musc = _ann_area_from_rle(m_ann, rle_musc)
-            if area_musc is None:
-                continue
-            if area_musc > max_musc_area:
-                continue
-            rles_musc.append(rle_musc)
-            valid_musc.append(m_ann)
-
-        if not rles_musc:
-            continue
-
-        ious = mask_utils.iou([rle_ori], rles_musc, [0] * len(rles_musc))[0]
-        best_idx = int(np.argmax(ious))
-        best_iou = float(ious[best_idx])
-        if best_iou < min_iou:
-            continue
-
-        best_musc = valid_musc[best_idx]
-        best_rle = rles_musc[best_idx]
-        area_musc = _ann_area_from_rle(best_musc, best_rle)
-        if area_musc is None:
-            continue
-        bbox_ori = _ann_bbox_from_rle(ann, rle_ori)
-        bbox_musc = _ann_bbox_from_rle(best_musc, best_rle)
-        if not (bbox_ori and bbox_musc):
-            continue
-        bbox_iou = _bbox_iou(bbox_ori, bbox_musc)
-        area_ratio = area_ori / area_musc if area_musc > 0 else 0.0
-
-        row = [
-            str(image_id),
-            str(ann.get("id")),
-            str(best_musc.get("id")),
-            f"{best_iou:.4f}",
-            f"{bbox_iou:.4f}",
-            f"{area_ori:.1f}",
-            f"{area_musc:.1f}",
-            f"{area_ratio:.3f}",
-        ]
-        if only_best:
-            existing = best_by_image.get(image_id)
-            if existing is None or best_iou > existing["iou"]:
-                best_by_image[image_id] = {"iou": best_iou, "row": row}
-        else:
-            lines.append("\t".join(row))
-        stats["total"] += 1
-        stats["matched"] += 1
-
-    if only_best:
-        for image_id in sorted(best_by_image.keys()):
-            lines.append("\t".join(best_by_image[image_id]["row"]))
-
-    if output_path is None:
-        output_path = os.path.join(os.getcwd(), "compare_coco_annotations.log")
-    output_dir = os.path.dirname(output_path)
-    if output_dir:
-        os.makedirs(output_dir, exist_ok=True)
-    with open(output_path, "w", encoding="utf-8") as f:
-        f.write("\n".join(lines))
-        f.write("\n")
-        f.write(f"total={stats['total']} matched={stats['matched']}\n")
-    print(f"Saved comparison log to {output_path}")
-
-
-def _ann_area(ann, image_info=None):
-    area = _ann_area_from_rle(ann, rle=None)
-    if area is not None:
-        return area
-    if image_info is None:
-        return None
-    height = image_info.get("height")
-    width = image_info.get("width")
-    if height is None or width is None:
-        return None
-    rle = _ann_to_rle(ann, height, width)
-    return _ann_area_from_rle(ann, rle)
-
-
-def plot_area_histogram(
-    json_path_a,
-    json_path_b,
-    output_path=None,
-    bins=50,
-    log_scale=False,
-    min_area=100000.0,
-    max_area=250000.0,
-):
-    with open(json_path_a, "r", encoding="utf-8") as f:
-        coco_a = json.load(f)
-    with open(json_path_b, "r", encoding="utf-8") as f:
-        coco_b = json.load(f)
-
-    images_a = {img["id"]: img for img in coco_a.get("images", [])}
-    images_b = {img["id"]: img for img in coco_b.get("images", [])}
-
-    def collect_areas(coco, images_by_id):
-        areas = []
-        for ann in coco.get("annotations", []):
-            image_info = images_by_id.get(ann.get("image_id"))
-            area = _ann_area(ann, image_info=image_info)
-            if area is None:
-                continue
-            if area < min_area or area > max_area:
-                continue
-            if area is not None:
-                areas.append(area)
-        return areas
-
-    areas_a = collect_areas(coco_a, images_a)
-    areas_b = collect_areas(coco_b, images_b)
-
-    if not areas_a or not areas_b:
-        raise ValueError("No valid areas found in one of the JSON files.")
-
-    label_a = os.path.basename(json_path_a)
-    label_b = os.path.basename(json_path_b)
-
-    plt.figure(figsize=(10, 6))
-    plt.hist(areas_a, bins=bins, alpha=0.6, label=label_a)
-    plt.hist(areas_b, bins=bins, alpha=0.6, label=label_b)
-    plt.xlabel(f"Area (pixels, {min_area:.0f}-{max_area:.0f})")
-    plt.ylabel("Count")
-    plt.title("COCO Annotation Area Histogram")
-    plt.legend()
-    if log_scale:
-        plt.yscale("log")
-
-    if output_path is None:
-        output_path = os.path.join(os.getcwd(), "area_histogram.png")
-    output_dir = os.path.dirname(output_path)
-    if output_dir:
-        os.makedirs(output_dir, exist_ok=True)
-    plt.tight_layout()
-    plt.savefig(output_path, dpi=200)
-    plt.close()
-    print(f"Saved area histogram to {output_path}")
-
-
-def plot_compare_log_metrics(log_path, output_path=None, bins=50):
-    with open(log_path, "r", encoding="utf-8") as f:
-        lines = [line.strip() for line in f if line.strip()]
-
-    header = None
-    rows = []
-    for line in lines:
-        if line.startswith("total="):
-            continue
-        parts = line.split("\t")
-        if header is None:
-            header = parts
-            continue
-        if len(parts) != len(header):
-            continue
-        rows.append(parts)
-
-    if not header or not rows:
-        raise ValueError("No valid data rows found in log file.")
-
-    id_cols = {"image_id", "ori_ann_id", "best_musc_id"}
-    metric_cols = [i for i, name in enumerate(header) if name not in id_cols]
-    metric_names = [header[i] for i in metric_cols]
-
-    data = {name: [] for name in metric_names}
-    for parts in rows:
-        for idx, name in zip(metric_cols, metric_names):
-            try:
-                data[name].append(float(parts[idx]))
-            except ValueError:
-                continue
-
-    num_metrics = len(metric_names)
-    if num_metrics == 0:
-        raise ValueError("No metric columns found to plot.")
-
-    cols = 3
-    rows_n = int(np.ceil(num_metrics / cols))
-    plt.figure(figsize=(5 * cols, 4 * rows_n))
-
-    for i, name in enumerate(metric_names, start=1):
-        values = data.get(name, [])
-        ax = plt.subplot(rows_n, cols, i)
-        ax.hist(values, bins=bins, alpha=0.8)
-        ax.set_title(name)
-        ax.set_ylabel("Count")
-        ax.set_xlabel(name)
-
-    plt.tight_layout()
-    if output_path is None:
-        output_path = os.path.join(os.getcwd(), "compare_metrics.png")
-    output_dir = os.path.dirname(output_path)
-    if output_dir:
-        os.makedirs(output_dir, exist_ok=True)
-    plt.savefig(output_path, dpi=200)
-    plt.close()
-    print(f"Saved metrics plot to {output_path}")
-
-
-def merge_curriculum_dataset(
-    dataset_dir: str,
-    stage_counts: list[int],
-    stages: tuple[str, ...] = ("easy", "hard", "extreme"),
-    output_subdir: str = "merge",
-) -> str:
-    """
-    Merge easy/hard/extreme data into a single folder with renumbered ids.
-
-    Args:
-        dataset_dir: Root containing {easy,hard,extreme}/xray and /anno.
-        stage_counts: Number of images to take from each stage
-            (e.g. [4000, 6000, 8000]).
-        stages: Stage names in order.
-        output_subdir: Name of merged output directory under dataset_dir.
-
-    Returns:
-        Path to the merged dataset directory.
-    """
-    if len(stage_counts) != len(stages):
-        raise ValueError("stage_counts length must match stages length.")
-    if any(c < 0 for c in stage_counts):
-        raise ValueError("stage_counts must be non-negative.")
-
-    offsets = []
-    running = 0
-    for count in stage_counts:
-        offsets.append(running)
-        running += count
-    out_root = os.path.join(dataset_dir, output_subdir)
-    out_img_dir = os.path.join(out_root, "xray")
-    out_anno_dir = os.path.join(out_root, "anno")
-    out_anno_fusion_dir = os.path.join(out_root, "anno_fusion")
-    os.makedirs(out_img_dir, exist_ok=True)
-    os.makedirs(out_anno_dir, exist_ok=True)
-    os.makedirs(out_anno_fusion_dir, exist_ok=True)
-
-    stage_maps = []
-    for stage, offset, max_count in zip(stages, offsets, stage_counts):
-        stage_img_dir = os.path.join(dataset_dir, stage, "xray")
-        stage_anno_dir = os.path.join(dataset_dir, stage, "anno")
-        stage_anno_fusion_dir = os.path.join(dataset_dir, stage, "anno_fusion")
-        if not os.path.isdir(stage_img_dir) or not os.path.isdir(stage_anno_dir):
-            continue
-
-        id_map = {}
-        file_map = {}
-        copied = 0
-        for fname in sorted(os.listdir(stage_img_dir)):
-            if max_count and copied >= max_count:
-                break
-            base, ext = os.path.splitext(fname)
-            if not base.isdigit():
-                continue
-            img_path = os.path.join(stage_img_dir, fname)
-            anno_path = os.path.join(stage_anno_dir, f"{base}.json")
-            if not os.path.isfile(img_path) or not os.path.isfile(anno_path):
-                continue
-
-            new_id = offset + int(base)
-            new_base = f"{new_id:0{len(base)}d}"
-            dst_img = os.path.join(out_img_dir, f"{new_base}{ext}")
-            dst_anno = os.path.join(out_anno_dir, f"{new_base}.json")
-            if not os.path.exists(dst_img):
-                shutil.copy2(img_path, dst_img)
-            if not os.path.exists(dst_anno):
-                shutil.copy2(anno_path, dst_anno)
-
-            if os.path.isdir(stage_anno_fusion_dir):
-                anno_fusion_src = os.path.join(stage_anno_fusion_dir, f"{base}.json")
-                if os.path.isfile(anno_fusion_src):
-                    dst_anno_fusion = os.path.join(out_anno_fusion_dir, f"{new_base}.json")
-                    if not os.path.exists(dst_anno_fusion):
-                        shutil.copy2(anno_fusion_src, dst_anno_fusion)
-            id_map[int(base)] = new_id
-            file_map[fname] = f"{new_base}{ext}"
-            copied += 1
-
-        stage_maps.append(
-            {
-                "stage": stage,
-                "id_map": id_map,
-                "file_map": file_map,
-            }
-        )
-
-    def _rewrite_file_name(old_name: str, new_base: str) -> str:
-        folder, fname = os.path.split(old_name)
-        ext = os.path.splitext(fname)[1]
-        new_name = f"{new_base}{ext}"
-        return os.path.join(folder, new_name) if folder else new_name
-
-    def _merge_coco(filename: str) -> None:
-        merged = {
-            "info": None,
-            "licenses": None,
-            "categories": None,
-            "images": [],
-            "annotations": [],
-        }
-        next_ann_id = 1
-        for item in stage_maps:
-            stage = item["stage"]
-            id_map = item["id_map"]
-            if not id_map:
-                continue
-            src_path = os.path.join(dataset_dir, stage, filename)
-            if not os.path.exists(src_path):
-                continue
-            with open(src_path, "r", encoding="utf-8") as f:
-                data = json.load(f)
-
-            if merged["info"] is None:
-                merged["info"] = data.get("info", DEFAULT_INFO)
-                merged["licenses"] = data.get("licenses", DEFAULT_LICENSES)
-                merged["categories"] = data.get("categories", DEFAULT_CATEGORIES)
-
-            for image in data.get("images", []):
-                old_id = image.get("id")
-                if old_id is None or old_id not in id_map:
-                    continue
-                new_id = id_map[old_id]
-                new_base = f"{new_id:06d}"
-                new_image = dict(image)
-                new_image["id"] = new_id
-                if "file_name" in new_image:
-                    new_image["file_name"] = _rewrite_file_name(
-                        new_image["file_name"], new_base
-                    )
-                merged["images"].append(new_image)
-
-            for ann in data.get("annotations", []):
-                old_image_id = ann.get("image_id")
-                if old_image_id is None or old_image_id not in id_map:
-                    continue
-                new_ann = dict(ann)
-                new_ann["image_id"] = id_map[old_image_id]
-                new_ann["id"] = next_ann_id
-                next_ann_id += 1
-                merged["annotations"].append(new_ann)
-
-        if merged["info"] is None:
-            return
-
-        out_path = os.path.join(out_root, filename)
-        with open(out_path, "w", encoding="utf-8") as f:
-            json.dump(merged, f, ensure_ascii=False, indent=2)
-
-    _merge_coco("coco.json")
-    _merge_coco("coco_agnostic.json")
-
-    return out_root

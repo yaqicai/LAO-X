@@ -175,9 +175,22 @@ def load_config(model_path):
     return edict(cfg)
 
 
+_REPO_ROOT = Path(__file__).resolve().parents[4]
+
+
+def _expand_path_vars(value):
+    """Expand ${VAR} in string config values; LAOX_DATA_ROOT defaults to <repo>/datasets."""
+    if not isinstance(value, str):
+        return value
+    data_root = os.environ.get('LAOX_DATA_ROOT', str(_REPO_ROOT / 'datasets'))
+    value = value.replace('${LAOX_DATA_ROOT}', data_root)
+    return os.path.expandvars(value)
+
+
 def load_config_file(config_path, model_name=None, return_edict=False):
     with open(config_path, 'r') as f:
         cfg = yaml.safe_load(f)
+    cfg = {k: _expand_path_vars(v) for k, v in cfg.items()}
 
     if 'SUBCONFIGS' in cfg:
         if model_name is not None and model_name in cfg['SUBCONFIGS']:

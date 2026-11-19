@@ -1,11 +1,17 @@
 import argparse
 import datetime
 import json
+import os
 from pathlib import Path
 
 import cv2
 import numpy as np
 from pycocotools import mask as mask_util
+
+
+# <LAO-X>/third_party/CutLER/cutler/demo/export_musc_heat_to_coco.py
+LAOX_ROOT = Path(__file__).resolve().parents[4]
+DEFAULT_DATA_ROOT = Path(os.environ.get("LAOX_DATA_ROOT", LAOX_ROOT / "datasets")) / "det_compass_xp"
 
 
 def parse_args():
@@ -18,7 +24,7 @@ def parse_args():
     parser.add_argument(
         "--image-dir",
         type=Path,
-        default=Path("/path/to/datasets/det_compass_xp/xray"),
+        default=DEFAULT_DATA_ROOT / "xray",
         help="Directory that stores the original images.",
     )
     parser.add_argument(
@@ -30,7 +36,7 @@ def parse_args():
     parser.add_argument(
         "--output",
         type=Path,
-        default=Path("/path/to/datasets/det_compass_xp/coco_musc.json"),
+        default=DEFAULT_DATA_ROOT / "annotations" / "coco_musc.json",
         help="Path to save the generated COCO annotation json.",
     )
     parser.add_argument(

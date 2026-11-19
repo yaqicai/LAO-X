@@ -416,7 +416,6 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--image-id-map",
         type=Path,
-        # default=Path("/home/yujunwei/UnSAM/datasets/entity/val_lr_image_id_map.json"),
         help=(
             "Path to a JSON file mapping image names to ids. "
             "If provided, image ids in outputs follow the mapping and folder prefixes in the map are ignored."

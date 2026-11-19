@@ -9,15 +9,21 @@ import logging
 import os
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 from pycocotools.coco import COCO
 from pycocotools.cocoeval import COCOeval
 
 
-DEFAULT_PROJECT_ROOT = Path("/path/to/LAO-X/third_party/CutLER")
+# <LAO-X>/third_party/CutLER/cutler/demo/run_musc_fusion_ablation.py
+DEFAULT_PROJECT_ROOT = Path(__file__).resolve().parents[2]  # third_party/CutLER
 DEFAULT_CUTLER_ROOT = DEFAULT_PROJECT_ROOT / "cutler"
-DEFAULT_DATA_ROOT = Path("/path/to/datasets/det_compass_xp")
+LAOX_ROOT = DEFAULT_PROJECT_ROOT.parents[1]
+DEFAULT_DATA_ROOT = Path(os.environ.get("LAOX_DATA_ROOT", LAOX_ROOT / "datasets")) / "det_compass_xp"
+DEFAULT_ANN_ROOT = DEFAULT_DATA_ROOT / "annotations"
+DEFAULT_RESULTS_ROOT = Path(os.environ.get("LAOX_RESULTS_ROOT", LAOX_ROOT / "results"))
+DEFAULT_CKPT_ROOT = Path(os.environ.get("LAOX_CKPT_ROOT", LAOX_ROOT / "checkpoints"))
 
 
 def parse_args():
@@ -37,17 +43,13 @@ def parse_args():
     parser.add_argument(
         "--musc-dir",
         type=Path,
-        default=Path(
-            "/path/to/LAO-X/third_party/MuSc/output/mvtec_xp/"
-            "ViT-L-14-336/imagesize[560,840]/A/det_compass_xp"
-        ),
+        default=DEFAULT_RESULTS_ROOT / "object_bank" / "musc_heatmaps",
+        help="Flat dir of MuSc forward heatmaps named like the X-ray images "
+        "(output of third_party/MuSc/scripts/laox_heatmaps.sh).",
     )
     parser.add_argument(
         "--model-weights",
-        default=(
-            "/path/to/LAO-X/granularity_divide_and_conquer/"
-            "ckpts/cutler_cascade_final.pth"
-        ),
+        default=str(DEFAULT_CKPT_ROOT / "cutler_cascade_final.pth"),
     )
     parser.add_argument(
         "--demo-opts",
@@ -56,28 +58,28 @@ def parse_args():
         help="Additional Detectron2 opts appended after MODEL.WEIGHTS.",
     )
     parser.add_argument("--confidence-threshold", type=float, default=0.35)
-    parser.add_argument("--gt-json", type=Path, default=DEFAULT_DATA_ROOT / "coco_agnostic.json")
+    parser.add_argument("--gt-json", type=Path, default=DEFAULT_ANN_ROOT / "coco_agnostic.json")
     parser.add_argument(
         "--full-gt-json",
         type=Path,
-        default=DEFAULT_DATA_ROOT / "coco_agnostic_1928.json",
+        default=DEFAULT_ANN_ROOT / "coco_agnostic_1928.json",
         help="Full DET-COMPASS GT. Useful when the 1623-image synthetic-source subset is desired.",
     )
     parser.add_argument(
         "--matches-json",
         type=Path,
-        default=DEFAULT_DATA_ROOT / "huggingface_matches.json",
+        default=DEFAULT_ANN_ROOT / "huggingface_matches.json",
     )
     parser.add_argument(
         "--heldout-json",
         type=Path,
-        default=DEFAULT_DATA_ROOT / "coco_agnostic.json",
+        default=DEFAULT_ANN_ROOT / "coco_agnostic.json",
         help="Images excluded by create_synthetic_dataset_musc.py before building synthetic sources.",
     )
     parser.add_argument(
         "--synthetic-source-coco",
         type=Path,
-        default=DEFAULT_DATA_ROOT / "coco_cutler_musc.json",
+        default=DEFAULT_ANN_ROOT / "coco_cutler_musc.json",
         help="COCO json used to reproduce the foreground filtering path from create_synthetic_dataset_musc.py.",
     )
     parser.add_argument(
@@ -102,7 +104,7 @@ def parse_args():
     parser.add_argument(
         "--output-root",
         type=Path,
-        default=DEFAULT_PROJECT_ROOT / "maskcut" / "det_compass_xp_cutler_N1_musc_ablation",
+        default=DEFAULT_RESULTS_ROOT / "object_bank" / "det_compass_xp_cutler_N1_musc_ablation",
     )
     parser.add_argument("--save-vis", action="store_true")
     parser.add_argument("--skip-existing", action=argparse.BooleanOptionalAction, default=True)
@@ -126,12 +128,12 @@ def parse_args():
     parser.add_argument(
         "--baseline-ori-json",
         type=Path,
-        default=DEFAULT_DATA_ROOT / "coco_cutler_ori.json",
+        default=DEFAULT_ANN_ROOT / "coco_cutler_ori.json",
     )
     parser.add_argument(
         "--baseline-musc-json",
         type=Path,
-        default=DEFAULT_DATA_ROOT / "coco_cutler_musc.json",
+        default=DEFAULT_ANN_ROOT / "coco_cutler_musc.json",
     )
     return parser.parse_args()
 
@@ -418,7 +420,7 @@ def run_demo(args, files, pred_json, output_dir, coeff, sharp_temp, soft_temp, p
     if args.dry_run:
         return
     env = os.environ.copy()
-    env.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
+    env.setdefault("MPLCONFIGDIR", os.path.join(tempfile.gettempdir(), "matplotlib"))
     result = subprocess.run(
         cmd,
         cwd=str(args.demo_cwd),

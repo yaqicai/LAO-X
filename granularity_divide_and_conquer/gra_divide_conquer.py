@@ -1,26 +1,31 @@
+"""Granularity divide-and-conquer oversegmentation (adapted from UnSAMv2).
+
+Divide: CutLER (Cascade Mask R-CNN) proposes instance masks.
+Conquer: DINOv3 ViT-B/16 patch features of each instance crop are iteratively
+merged into part masks, refined with CascadePSP, and scored by granularity.
+Writes one COCO-style JSON per image to --output-dir.
+
+Checkpoints default to $LAOX_CKPT_ROOT (default: <repo>/checkpoints); the DINOv3
+repository is expected at <this dir>/dinov3 (see INSTALL.md).
+Usually launched through run_gra_dico.sh.
+"""
 from collections import defaultdict
 import os
 import argparse
 import torch
-import tqdm
 import numpy as np
 import segmentation_refinement as refine
 import json
 from tqdm import tqdm
 import cv2
-import cutler.custom_heads
+import cutler.custom_heads  # noqa: F401  (registers CustomCascadeROIHeads)
 
 from coco_annotator import create_image_info, create_annotation_info, output, category_info
 from iterative_merging import iterative_merge
 from cascadepsp import postprocess
 from detectron2.config import get_cfg
-
-from detectron2.engine.defaults import DefaultPredictor
-from detectron2.engine import DefaultPredictor, default_setup
-from detectron2.projects.deeplab import add_deeplab_config
-from detectron2.config import get_cfg
-from detectron2.utils.colormap import random_color
-from mask2former import add_maskformer2_config
+from detectron2.engine import DefaultPredictor
+from mask2former import add_maskformer2_config  # noqa: F401  (registers Mask2Former components)
 from pycocotools import mask as mask_util
 from compute_granularity import compute_granularity_scores_sqrt
 from helper import (
@@ -36,9 +41,11 @@ from helper import (
 )
 import warnings
 
-
-
 warnings.filterwarnings("ignore")
+
+THIS_DIR = os.path.dirname(os.path.abspath(__file__))
+REPO_ROOT = os.path.dirname(THIS_DIR)
+CKPT_ROOT = os.environ.get("LAOX_CKPT_ROOT", os.path.join(REPO_ROOT, "checkpoints"))
 
 
 def add_cutler_config(cfg):
@@ -65,6 +72,8 @@ def setup_cutler(args):
     add_cutler_config(cfg)
     cfg.set_new_allowed(True)
     cfg.merge_from_file(args.config_file)
+    # --cutler-weights sets MODEL.WEIGHTS; an explicit `--opts MODEL.WEIGHTS ...` still wins.
+    cfg.merge_from_list(["MODEL.WEIGHTS", args.cutler_weights])
     cfg.merge_from_list(args.opts)
     if cfg.MODEL.DEVICE == 'cpu' and getattr(cfg.MODEL.RESNETS, 'NORM', None) == 'SyncBN':
         cfg.MODEL.RESNETS.NORM = "BN"
@@ -82,22 +91,37 @@ def setup_cutler(args):
     return cfg
 
 def get_parser():
-    parser = argparse.ArgumentParser(description="")
+    parser = argparse.ArgumentParser(description="Granularity divide-and-conquer oversegmentation.")
     parser.add_argument(
         "--config-file",
-        default="model_zoo/configs/CutLER-ImageNet/cascade_mask_rcnn_R_50_FPN.yaml",
+        default=os.path.join(THIS_DIR, "model_zoo/configs/CutLER-ImageNet/cascade_mask_rcnn_R_50_FPN.yaml"),
         metavar="FILE",
+    )
+    # checkpoints
+    parser.add_argument(
+        "--cutler-weights",
+        default=os.path.join(CKPT_ROOT, "cutler_cascade_final.pth"),
+        help="CutLER checkpoint (sets MODEL.WEIGHTS).",
+    )
+    parser.add_argument(
+        "--dinov3-repo",
+        default=os.path.join(THIS_DIR, "dinov3"),
+        help="Local clone of facebookresearch/dinov3 (loaded with torch.hub, source='local').",
+    )
+    parser.add_argument(
+        "--dinov3-weights",
+        default=os.path.join(CKPT_ROOT, "dinov3_vitb16_pretrain_lvd1689m-73cec8be.pth"),
+        help="DINOv3 ViT-B/16 pretrained weights.",
     )
     # backbone args
     parser.add_argument("--patch-size", default=8, type=int)
     parser.add_argument("--feature-dim", default=768, type=int)
-    parser.add_argument("--backbone-size", default='base', type=str)
-    parser.add_argument("--backbone-url", default="https://dl.fbaipublicfiles.com/dino/dino_vitbase8_pretrain/dino_vitbase8_pretrain.pth", type=str)
 
     parser.add_argument("--input-dir", type=str)
-    parser.add_argument("--sa1b-anno-dir", type=str)
     parser.add_argument("--output-dir", type=str, default="output_dico")
     parser.add_argument("--preprocess", default=None, type=bool)
+    # --postprocess / --granularity are accepted for CLI compatibility; CascadePSP
+    # refinement and granularity scoring always run.
     parser.add_argument("--postprocess", default=None, type=bool)
     parser.add_argument("--granularity", default=None, type=bool)
     parser.add_argument("--detection-per-image", default=1000, type=int)
@@ -110,37 +134,25 @@ def get_parser():
     parser.add_argument("--NMS-iou", default=0.9, type=float)
     parser.add_argument("--NMS-step", default=5)
     parser.add_argument("--thetas", nargs='+', type=float, default=[0.8, 0.7, 0.6, 0.5, 0.4, 0.3])
-    parser.add_argument("--NMS-iou-final", default=0.9, type=float)
     # postprocess args
-    parser.add_argument("--crop-ratio", default=2.0)
     parser.add_argument("--refine-scale", default=1)
     parser.add_argument("--refine-min-L", default=100)
     parser.add_argument("--refine-max-L", default=900)
     parser.add_argument("--iou-thresh", default=0.5)
     parser.add_argument("--min-area-thresh", default=0.0)
     parser.add_argument("--max-area-thresh", default=0.9)
-    parser.add_argument("--cover-thresh", default=0.9)
     parser.add_argument(
         "--opts",
-        help="Modify config options using the command-line 'KEY VALUE' pairs",
+        help="Modify config options using the command-line 'KEY VALUE' pairs (must come last)",
         default=[],
         nargs=argparse.REMAINDER,
-    )
-    parser.add_argument(
-        "--use-norm",
-        action="store_true",
-        default=True
     )
     return parser
 
 def main():
     args = get_parser().parse_args()
     print(args)
-    
-    if getattr(args, 'vis_dir', None) is None:
-        args.vis_dir = os.path.join(args.output_dir, "vis")
-    os.makedirs(args.vis_dir, exist_ok=True)
-    
+
     # Initialize refiner for postprocessing
     refiner = refine.Refiner(device='cuda:0')
 
@@ -164,12 +176,11 @@ def main():
         predictor = DefaultPredictor(cfg)
 
         # load DINO backbone
-        DINO_DIR = "./dinov3"
         dinov3 = torch.hub.load(
-            DINO_DIR,
+            args.dinov3_repo,
             'dinov3_vitb16',
             source='local',
-            weights='./dinov3/weights/dinov3_vitb16_pretrain.pth',
+            weights=args.dinov3_weights,
         )
         dinov3 = dinov3.cuda().eval()
 
@@ -184,11 +195,9 @@ def main():
             # coco format annotator initialization
             output["image"], output["annotations"] = {}, []
 
-            # save path initializationw
-            # image_id = int(image_name.replace(".jpg", "").replace("sa_", ""))
+            # save path initialization (image ids come from numeric file names)
             image_id = int(os.path.splitext(image_name.replace("sa_", ""))[0])
 
-            # save_path = f"{args.output_dir}/{image_name.replace('.jpg', '.json')}"
             save_path = f"{args.output_dir}/{os.path.splitext(image_name)[0]}.json"
             if os.path.exists(save_path):
                 try:

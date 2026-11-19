@@ -58,5 +58,5 @@ TEST:
   PRECISE_BN:
     ENABLED: True
     NUM_ITER: 200
-  DETECTIONS_PER_IMAGE: 1 #
+  DETECTIONS_PER_IMAGE: 1  # LAO-X object bank: at most one detection per image (upstream: 100)
 OUTPUT_DIR: "output/"

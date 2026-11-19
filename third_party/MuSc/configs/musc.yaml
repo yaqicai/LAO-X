@@ -1,7 +1,6 @@
 datasets:
   dataset_name: 'mvtec_ad'  # choice ['mvtec_ad', 'visa']
-  # data_path: ./data/mvtec_anomaly_detection/
-  data_path: /path/to/datasets/det_compass_xp/
+  data_path: ./data/mvtec_anomaly_detection/
   class_name: 'ALL'
   img_resize: 518
   divide_num: 1

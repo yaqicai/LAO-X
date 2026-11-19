@@ -436,7 +436,7 @@ class Trainer:
             self._setup_lora_after_loading()
 
     def _load_resuming_checkpoint(self, ckpt_path: str):
-        """加载恢复训练的checkpoint"""
+        """Load the checkpoint to resume training from."""
         logging.info(f"Resuming training from {ckpt_path}")
 
         with g_pathmgr.open(ckpt_path, "rb") as f:

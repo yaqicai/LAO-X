@@ -1,13 +1,23 @@
 #!/usr/bin/env bash
+# Recompute COCO / X-ray protocol metrics (xlsx) for saved predictions in
+# output_eval with util_xray.evaluate_output_eval_metrics.
+#
+# Usage: [VAR=value ...] bash scripts/run_eval_metrics_batch.sh
+#   SUFFIX_SET   main (default) | ablation   predefined run suffixes below
+#   SUFFIXES     comma-separated run suffixes (overrides SUFFIX_SET)
+#   DATASETS     comma-separated datasets [det_compass_xp,CLCXray,DvXray,PIXray,HiXray,pidray]
+#   OUTPUT_EVAL_DIR  prediction root [${LAOX_OUTPUT_EVAL:-<repo>/output_eval}]
+#   START_ID [0], END_ID [full test split], PROTOCOL_* (see below), PYTHON [python]
+# A suffix is the part of the output_eval sub-directory after
+# <dataset>_img<start>_<end>_<model>_<gra>; "{UNSAMV2_CKPT}" expands to each
+# tag in UNSAMV2_CKPT_TAGS.
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 cd "${REPO_ROOT}"
- 
-OUTPUT_EVAL_DIR="/path/to/LAO-X/output_eval"
-# OUTPUT_EVAL_DIR="/path/to/results/output_eval"
-# OUTPUT_EVAL_DIR="/path/to/sam3/output_eval"
+
+OUTPUT_EVAL_DIR="${OUTPUT_EVAL_DIR:-${LAOX_OUTPUT_EVAL:-${REPO_ROOT}/output_eval}}"
 START_ID="${START_ID:-0}"
 SKIP_FUSION="${SKIP_FUSION:-1}"
 EVAL_MODE="${EVAL_MODE:-bbox}"
@@ -23,76 +33,37 @@ PROTOCOL_DILATE_RATIOS="${PROTOCOL_DILATE_RATIOS:-}"
 WRITE_ABO="${WRITE_ABO:-1}"
 UNSAMV2_CKPT_TAGS="${UNSAMV2_CKPT_TAGS:-unsamv2_plus_ckpt,unsamv2_ckpt}"
 
-SUFFIXES=(
-
-  # "_augmentation_restart_fusion_095_v2_easy"
-  # "_augmentation_restart_musc_aug_easy"
-  # "_augmentation_restart_musc_aug_hard"
-  # "_augmentation_restart_musc_aug_extreme"
-  # "_augmentation_restart_musc_aug_hard_only"
-  # "_augmentation_restart_musc_aug_extreme_only"
-  # "_augmentation_restart_musc_aug_fusion_easy"
-  # "_augmentation_restart_musc_aug_fusion_hard"
-  # "_augmentation_restart_musc_aug_fusion_extreme"
-  # "_augmentation_restart_musc_aug_fusion_hard_only"
-  # "_augmentation_restart_musc_aug_fusion_extreme_only"
-  # "_augmentation_restart_musc_aug_fusion_8gpus_easy"
-  # "_augmentation_restart_crop_musc_aug_bs16_easy"
-  # "_augmentation_restart_crop_musc_aug_bs16_hard"
-  # "_augmentation_restart_crop_musc_aug_bs16_extreme"
-  # "_augmentation_restart_crop_musc_aug_fusion_easy_40"
-  # "_augmentation_restart_crop_musc_aug_fusion_hard_32"
-  # "_augmentation_restart_crop_musc_aug_fusion_extreme_24"
-  # "_augmentation_restart_crop_musc_aug_fusion_bs16_easy_80"
-  # "_augmentation_restart_crop_musc_aug_fusion_bs16_hard_64"
-  # "_augmentation_restart_crop_musc_aug_fusion_bs16_extreme_48"
-
-  # "_augmentation_restart_crop_musc_aug_bs16_xp_extreme_m0.5_48"
-
-
-  # Main Table
-  # "_det_compass_xp_divide_and_conquer_1000_m0.5"
-  # "_augmentation_restart_crop_musc_aug_fusion_bs16_extreme_m0.5_48"
-  # "_augmentation_restart_crop_musc_aug_fusion_bs16_xp_extreme_m0.5_48"
-  # "_sam2"
-  # "_sam3"
-
-  # Ablations
-  # "_augmentation_restart_crop_musc_aug_fusion_bs16_easy_m0.5_80"
-  # "_augmentation_restart_crop_musc_aug_fusion_bs16_hard_m0.5_64"
-  # "_augmentation_restart_crop_musc_aug_fusion_bs16_merge_m0.5"
-  # "_augmentation_restart_crop_musc_aug_fusion_bs16_xp_extreme_00_07_m0.5_48"
-  # "_augmentation_restart_crop_musc_aug_fusion_bs16_xp_extreme_00_09_m0.5_48"
-  # "_augmentation_restart_crop_musc_aug_fusion_bs16_xp_extreme_9_12_m0.5_48"
-  # "_augmentation_restart_crop_musc_aug_fusion_bs16_xp_extreme_12_15_m0.5_48"
-  # "_augmentation_restart_musc_aug_fusion_extreme_only_m0.5_{UNSAMV2_CKPT}"
+# Main comparison table.
+MAIN_SUFFIXES=(
+  "_det_compass_xp_divide_and_conquer_1000_m0.5"
+  "_augmentation_restart_crop_musc_aug_fusion_bs16_extreme_m0.5_48"
+  "_augmentation_restart_crop_musc_aug_fusion_bs16_xp_extreme_m0.5_48"
+  "_sam2"
+  "_sam3"
+)
+# Ablations.
+ABLATION_SUFFIXES=(
+  "_augmentation_restart_crop_musc_aug_fusion_bs16_easy_m0.5_80"
+  "_augmentation_restart_crop_musc_aug_fusion_bs16_hard_m0.5_64"
+  "_augmentation_restart_crop_musc_aug_fusion_bs16_merge_m0.5"
+  "_augmentation_restart_crop_musc_aug_fusion_bs16_xp_extreme_00_07_m0.5_48"
+  "_augmentation_restart_crop_musc_aug_fusion_bs16_xp_extreme_00_09_m0.5_48"
+  "_augmentation_restart_crop_musc_aug_fusion_bs16_xp_extreme_9_12_m0.5_48"
+  "_augmentation_restart_crop_musc_aug_fusion_bs16_xp_extreme_12_15_m0.5_48"
   "_augmentation_restart_crop_musc_aug_holistic_only_bs16_extreme_m0.5_48"
   "_augmentation_restart_crop_musc_aug_part_only_unsamv2_bs16_extreme_m0.5_48"
   "_augmentation_restart_crop_aug_rgb_fusion_bs16_extreme_m0.5_48"
-  "_augmentation_restart_musc_aug_fusion_extreme_only_m0.5_unsamv2_plus_ckpt"
-  "_augmentation_restart_musc_aug_fusion_extreme_only_m0.5_unsamv2_ckpt"
+  "_augmentation_restart_musc_aug_fusion_extreme_only_m0.5_{UNSAMV2_CKPT}"
 )
+if [[ -n "${SUFFIXES:-}" ]]; then
+  IFS=',' read -ra SUFFIXES <<< "${SUFFIXES}"
+elif [[ "${SUFFIX_SET:-main}" == "ablation" ]]; then
+  SUFFIXES=("${ABLATION_SUFFIXES[@]}")
+else
+  SUFFIXES=("${MAIN_SUFFIXES[@]}")
+fi
+IFS=',' read -ra DATASETS <<< "${DATASETS:-det_compass_xp,CLCXray,DvXray,PIXray,HiXray,pidray}"
 
-DATASETS=(
-  # det_compass_xp
-  # CLCXray
-  # DvXray
-  PIXray
-  # HiXray
-  pidray
-)
-# get_end_id() {
-#   local dataset="$1"
-#   case "${dataset}" in
-#     det_compass_xp) echo 100 ;;
-#     CLCXray) echo 100 ;;
-#     DvXray) echo 100 ;;
-#     PIXray) echo 100 ;;
-#     HiXray) echo 100 ;;
-#     pidray) echo 100 ;;
-#     *) echo 100 ;;
-#   esac
-# }
 get_end_id() {
   local dataset="$1"
   case "${dataset}" in
@@ -133,7 +104,7 @@ for SUFFIX in "${EXPANDED_SUFFIXES[@]}"; do
     else
       DATASET_END_ID="$(get_end_id "${DATASET}")"
     fi
-    python - <<PY
+    "${PYTHON:-python}" - <<PY
 from util_xray import evaluate_output_eval_metrics
 
 def _parse_csv(raw, cast=None):

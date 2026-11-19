@@ -77,7 +77,9 @@ def load_args(cfg, args):
     if args.pretrained is not None:
         cfg['models']['pretrained'] = args.pretrained
     if args.img_resize is not None:
-        cfg['datasets']['img_resize'] = [560, 840] #[448, 672] # [560, 840] # args.img_resize
+        # LAO-X: any --img_resize value selects the fixed non-square (H, W) = (560, 840)
+        # input used for all LAO-X runs; the numeric value itself is ignored.
+        cfg['datasets']['img_resize'] = [560, 840]
     if args.batch_size is not None:
         cfg['models']['batch_size'] = args.batch_size
     if args.divide_num is not None:

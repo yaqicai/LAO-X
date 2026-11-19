@@ -1,3 +1,10 @@
+> **Note:** this is the README of the upstream
+> [UnSAMv2](https://github.com/yujunwei04/UnSAMv2) project that LAO-X builds on,
+> kept for reference. Image links point to the upstream repository's assets.
+> For LAO-X commands and paths see the [main README](../README.md); for example,
+> `granularity_divide_and_conquer/run_gra_dico.sh` now takes the dataset and
+> stage as arguments and reads checkpoints from `$LAOX_CKPT_ROOT`.
+
 <p align="center">
 
   <h1 align="center">UnSAMv2: Self-Supervised Learning Enables Segment Anything at Any Granularity</h1>
@@ -21,8 +28,8 @@
 </h3>
 
 <div align="center">
-  <img src="./assets/teaser.png" alt="" style="width: 100%; margin: 10px 0;">
-  <!-- <img src="./assets/edit_demo.jpg" alt="" style="width: 100%; margin: 10px 0;"> -->
+  <img src="https://github.com/yujunwei04/UnSAMv2/raw/main/assets/teaser.png" alt="" style="width: 100%; margin: 10px 0;">
+  <!-- <img src="https://github.com/yujunwei04/UnSAMv2/raw/main/assets/edit_demo.jpg" alt="" style="width: 100%; margin: 10px 0;"> -->
 </div>
 
 ## News 🎉
@@ -52,7 +59,7 @@ UnSAMv2 has two stages. (1) We generate pseudo mask-granularity pairs with granu
 ### 1. Granularity-Aware Divide-and-Conquer ✌️
 To run granularity-aware divide-and-conquer, please download CutLER's weights [here](http://dl.fbaipublicfiles.com/cutler/checkpoints/cutler_cascade_final.pth)
 
-Then, specify the input, output, and checkpoint path in the [script](./granularity_divide_and_conquer/run_gra_dico.sh) and run
+Then, specify the input, output, and checkpoint path in the [script](../granularity_divide_and_conquer/run_gra_dico.sh) and run
 ```bash
 cd granularity_divide_and_conquer
 bash run_gra_dico.sh
@@ -64,7 +71,7 @@ We host UnSAMv2 model on HuggingFace Space, feel free to try it out by following
 
 ### UnSAMv2: Inference Demo for Interative Image Segmentation
 <div align="center">
-  <img src="./assets/int_demo.png" alt="" style="width: 100%; margin: 10px 0;">
+  <img src="https://github.com/yujunwei04/UnSAMv2/raw/main/assets/int_demo.png" alt="" style="width: 100%; margin: 10px 0;">
 </div>
 
 
@@ -72,7 +79,7 @@ We provide the tutorial notebook for running UnSAMv2's interactive segmentation 
 
 ### UnSAMv2: Inference Demo for Whole Image Segmentation
 <div align="center">
-  <img src="./assets/whole_demo_upd.png" alt="" style="width: 100%; margin: 10px 0;">
+  <img src="https://github.com/yujunwei04/UnSAMv2/raw/main/assets/whole_demo_upd.png" alt="" style="width: 100%; margin: 10px 0;">
 </div>
 
 We provide the tutorial notebook for running UnSAMv2's whole image segmentation [here](sam2/notebooks/whole_image_segmentation.ipynb).
@@ -80,7 +87,7 @@ We provide the tutorial notebook for running UnSAMv2's whole image segmentation 
 ### UnSAMv2: Inference Demo for Video Segmentation
 
 <div align="center">
-  <img src="./assets/video_demo.png" alt="" style="width: 100%; margin: 10px 0;">
+  <img src="https://github.com/yujunwei04/UnSAMv2/raw/main/assets/video_demo.png" alt="" style="width: 100%; margin: 10px 0;">
 </div>
 
 We provide the tutorial notebook for running UnSAMv2's video segmentation [here](sam2/notebooks/video_segmentation.ipynb).

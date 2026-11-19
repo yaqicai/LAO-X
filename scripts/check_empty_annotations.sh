@@ -6,7 +6,7 @@ set -euo pipefail
 
 TARGET_DIR="${1:-.}"
 
-python - <<'PY' "${TARGET_DIR}"
+"${PYTHON:-python}" - <<'PY' "${TARGET_DIR}"
 import json
 import os
 import sys

@@ -44,16 +44,33 @@ The synthesis generator needs neither a GPU nor Detectron2:
 
 ```bash
 pip install numpy==1.26.4 opencv-python==4.10.0.84 Pillow==10.4.0 scikit-learn==1.6.1 \
-            datasets==3.6.0 pyarrow==20.0.0 pycocotools==2.0.10 matplotlib tqdm
+            datasets==3.6.0 pyarrow==20.0.0 pycocotools==2.0.10 tqdm
 pip install torch==2.5.1 --index-url https://download.pytorch.org/whl/cpu
 ```
 
-The generator also needs the three high/low-energy lookup dictionaries
-(`xray_highlow_to_{colour,grey,density}_dict_RAW.pkl`) in
-`dependencies/det_compass_crops/compass_editor/`. Build them from DET-COMPASS
-with `create_colour_dict_fast.py`, `create_grey_dict.py` and
-`create_density_dict.py` in `dependencies/det_compass_crops/`.
+The generator needs the three high/low-energy lookup tables
+(`xray_highlow_to_{colour,grey,density}_dict_RAW.pkl`) in `$LAOX_LUT_DIR`
+(default `synthesis/luts/`). Build them once from DET-COMPASS:
+
+```bash
+python synthesis/build_luts.py all
+```
 
 ## Checkpoints
 
-See the weights table in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+Place the weights in `$LAOX_CKPT_ROOT` (default `checkpoints/`):
+
+| File | Used by | Source |
+| --- | --- | --- |
+| `sam2.1_hiera_small.pt` | training initialization | `bash sam2/checkpoints/download_ckpts.sh` |
+| `cutler_cascade_final.pth` | object bank, oversegmentation | [CutLER model zoo](https://github.com/facebookresearch/CutLER#model-zoo) |
+| `dinov3_vitb16_pretrain_lvd1689m-73cec8be.pth` | oversegmentation | [DINOv3](https://github.com/facebookresearch/dinov3) (ViT-B/16, LVD-1689M) |
+
+OpenCLIP ViT-L-14-336 (MuSc) and CascadePSP (oversegmentation refinement) are
+downloaded automatically on first use.
+
+## Interactive-evaluation benchmarks
+
+`evaluation/interactive` expects the GraCo benchmarks (GrabCut, Berkeley,
+DAVIS, SBD, PascalPart, PartImageNet) under `$LAOX_DATA_ROOT/interactive/`; see
+`evaluation/interactive/config.yml`.

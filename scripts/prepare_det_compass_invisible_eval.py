@@ -8,19 +8,32 @@ import os
 from collections import Counter
 from pathlib import Path
 
+import sys
+
 from datasets import Dataset, concatenate_datasets
 from PIL import Image
 
+REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+if REPO_ROOT not in sys.path:
+    sys.path.insert(0, REPO_ROOT)
 
-DEFAULT_CACHE_ROOT = (
-    "/path/to/hf_cache/datasets/"
-    "PAGF___det-compass/default/0.0.0"
+from config import XrayImgRoot, XrayRoot  # noqa: E402
+
+# Hugging Face datasets cache: $HF_DATASETS_CACHE, else $HF_HOME/datasets,
+# else ~/.cache/huggingface/datasets (the library defaults).
+HF_DATASETS_CACHE = os.environ.get("HF_DATASETS_CACHE") or os.path.join(
+    os.environ.get(
+        "HF_HOME", os.path.join(os.path.expanduser("~"), ".cache", "huggingface")
+    ),
+    "datasets",
 )
-DEFAULT_MATCHES = (
-    "/path/to/datasets/det_compass_xp/"
-    "annotations/huggingface_matches.json"
+DEFAULT_CACHE_ROOT = os.path.join(
+    HF_DATASETS_CACHE, "PAGF___det-compass", "default", "0.0.0"
 )
-DEFAULT_IMAGE_ROOT = "/path/to/datasets/det_compass_xp/xray"
+DEFAULT_MATCHES = os.path.join(
+    XrayRoot["det_compass_xp"], "annotations", "huggingface_matches.json"
+)
+DEFAULT_IMAGE_ROOT = XrayImgRoot["det_compass_xp"]
 DEFAULT_OUTPUT = (
     "annotations/det_compass_xp_coco_invisible_agnostic.json"
 )

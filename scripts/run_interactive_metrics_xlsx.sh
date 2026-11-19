@@ -1,9 +1,17 @@
 #!/usr/bin/env bash
+# Collect interactive-evaluation metrics (evaluation/interactive/xray_interactive_eval.sh
+# outputs) into one xlsx per method with util_xray.export_interactive_eval_metrics.
+# Methods are configured in the aligned arrays below.
+# Environment: GRAS, TRAIN_ROOT [${LAOX_RESULTS_ROOT:-<repo>/results}/train],
+# LAOX_CKPT_ROOT [<repo>/checkpoints] (only the checkpoint file names are used, as tags),
+# PYTHON [python].
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 cd "${REPO_ROOT}"
+TRAIN_ROOT="${TRAIN_ROOT:-${LAOX_RESULTS_ROOT:-${REPO_ROOT}/results}/train}"
+LAOX_CKPT_ROOT="${LAOX_CKPT_ROOT:-${REPO_ROOT}/checkpoints}"
 
 DEFAULT_GRAS="${GRAS:-0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1.0}"
 
@@ -16,7 +24,7 @@ DATASETS=(
   pidray
 )
 
-# 按方法逐项配置，索引一一对应。
+# One entry per method; all arrays below are index-aligned.
 COMMENTS=(
   "crop_musc_aug_fusion_bs16_xp"
   "det_compass_xp_divide_and_conquer_1000_clean"
@@ -25,10 +33,10 @@ COMMENTS=(
 )
 
 TRAIN_ROOTS=(
-  "results/train"
-  "/path/to/results/train"
-  "results/train"
-  "results/train"
+  "${TRAIN_ROOT}"
+  "${TRAIN_ROOT}"
+  "${TRAIN_ROOT}"
+  "${TRAIN_ROOT}"
 )
 
 STAGES=(
@@ -48,8 +56,8 @@ SAM_TYPES=(
 CKPT_PATHS=(
   ""
   ""
-  "/path/to/checkpoints/sam2.1_s.pt"
-  "/path/to/results/official_ckpt/unsamv2_plus_ckpt.pt"
+  "${LAOX_CKPT_ROOT}/sam2.1_s.pt"
+  "${LAOX_CKPT_ROOT}/unsamv2_plus_ckpt.pt"
 )
 
 GRAS_LISTS=(
@@ -138,7 +146,7 @@ for ((i=0; i<num_methods; i++)); do
 
   echo "[interactive_xlsx] output=${output_path}"
   for dataset in "${DATASETS[@]}"; do
-    python - <<PY
+    "${PYTHON:-python}" - <<PY
 from util_xray import export_interactive_eval_metrics
 
 export_interactive_eval_metrics(

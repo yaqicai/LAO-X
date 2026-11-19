@@ -2,7 +2,14 @@
 import argparse
 import json
 import os
+import sys
 from typing import Dict, List, Tuple
+
+REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+if REPO_ROOT not in sys.path:
+    sys.path.insert(0, REPO_ROOT)
+
+from config import XrayRoot  # noqa: E402
 
 
 def _polygon_to_segmentation(poly: List[List[float]]) -> List[List[float]] | None:
@@ -57,12 +64,12 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Merge Pixray polygons into coco.json as segmentation.")
     parser.add_argument(
         "--pixray-json-dir",
-        default="/path/to/datasets/pixray/pixray_json",
+        default=os.path.join(XrayRoot["PIXray"], "pixray_json"),
         help="Directory containing per-image Pixray json annotations.",
     )
     parser.add_argument(
         "--coco-json",
-        default="/path/to/datasets/pixray/coco.json",
+        default=os.path.join(XrayRoot["PIXray"], "coco.json"),
         help="COCO json to update.",
     )
     parser.add_argument(

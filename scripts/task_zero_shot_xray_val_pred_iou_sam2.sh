@@ -1,4 +1,12 @@
 #!/usr/bin/env bash
+# Sweep SAM 2 automatic-mask-generator pred_iou_thresh on the validation splits
+# (config.XrayImgRootVal / XrayImgRootValAnno) with scripts/sweep_pred_iou_thresh_sam2.py,
+# splitting the thresholds over the GPUs in GPUS.
+#
+# Usage: [VAR=value ...] bash scripts/task_zero_shot_xray_val_pred_iou_sam2.sh [COMMENT]
+# Environment: DATASETS, GPUS [0], MAX_IMAGES [100], PRED_IOU_MIN/MAX/STEP [0.0/0.3/0.05],
+# SAM2_CKPT [${LAOX_CKPT_ROOT:-<repo>/checkpoints}/sam2.1_hiera_small.pt],
+# OUTPUT_ROOT [${LAOX_RESULTS_ROOT:-<repo>/results}/pred_iou_thresh_sam2], PYTHON [python].
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -12,7 +20,6 @@ else
   COMMENT_SUFFIX=""
 fi
 
-# DATASETS="${DATASETS:-det_compass_xp,DvXray,CLCXray,PIXray,HiXray,pidray}"
 DATASETS="${DATASETS:-det_compass_xp,DvXray,CLCXray,PIXray,HiXray,pidray}"
 GPUS="${GPUS:-0}"
 
@@ -23,7 +30,7 @@ PRED_IOU_MIN="${PRED_IOU_MIN:-0.0}"
 PRED_IOU_MAX="${PRED_IOU_MAX:-0.3}"
 PRED_IOU_STEP="${PRED_IOU_STEP:-0.05}"
 
-SAM2_CKPT="${SAM2_CKPT:-${REPO_ROOT}/sam2/checkpoints/sam2.1_hiera_small.pt}"
+SAM2_CKPT="${SAM2_CKPT:-${LAOX_CKPT_ROOT:-${REPO_ROOT}/checkpoints}/sam2.1_hiera_small.pt}"
 SAM2_CFG="${SAM2_CFG:-configs/sam2.1/sam2.1_hiera_s.yaml}"
 POINTS_PER_SIDE="${POINTS_PER_SIDE:-64}"
 POINTS_PER_BATCH="${POINTS_PER_BATCH:-512}"
@@ -38,7 +45,7 @@ MIN_MASK_REGION_AREA="${MIN_MASK_REGION_AREA:-0}"
 GRA="${GRA:-1.0}"
 USE_M2M="${USE_M2M:-0}"
 
-OUTPUT_ROOT="${OUTPUT_ROOT:-${REPO_ROOT}/results_pred_iou_thresh_sam2}"
+OUTPUT_ROOT="${OUTPUT_ROOT:-${LAOX_RESULTS_ROOT:-${REPO_ROOT}/results}/pred_iou_thresh_sam2}"
 
 IFS=',' read -ra GPU_LIST <<< "${GPUS}"
 NUM_GPUS="${#GPU_LIST[@]}"
@@ -47,7 +54,7 @@ if [[ "${NUM_GPUS}" -le 0 ]]; then
   exit 1
 fi
 
-mapfile -t THRESHOLDS < <(python - "${PRED_IOU_MIN}" "${PRED_IOU_MAX}" "${PRED_IOU_STEP}" <<'PY'
+mapfile -t THRESHOLDS < <("${PYTHON:-python}" - "${PRED_IOU_MIN}" "${PRED_IOU_MAX}" "${PRED_IOU_STEP}" <<'PY'
 import sys
 import numpy as np
 
@@ -104,7 +111,7 @@ for DATASET in "${DATASET_LIST[@]}"; do
     CHUNK_OUT="${OUTPUT_DIR}/chunk_${chunk_start}_${chunk_end}"
     echo "[eval] dataset=${DATASET} pred_iou=${PRED_IOU_VALUES} gpu=${gpu} log=${LOG_FILE}"
     CUDA_VISIBLE_DEVICES="${gpu}" \
-      python scripts/sweep_pred_iou_thresh_sam2.py \
+      "${PYTHON:-python}" scripts/sweep_pred_iou_thresh_sam2.py \
         --config "${CONFIG}" \
         --datasets "${DATASET}" \
         --max-images "${MAX_IMAGES}" \

@@ -68,14 +68,6 @@ def load_results(path):
     with open(path, "r") as f:
         return json.load(f)
 
-def det_area(det):
-    area = det.get("area")
-    if area is not None:
-        return area
-    bbox = det.get("bbox")
-    if bbox and len(bbox) == 4:
-        return bbox[2] * bbox[3]
-    return 0.0
 
 def strong_filter_for_gra(dets, min_score, max_per_image):
     dets = [d for d in dets if d.get("score", 0.0) >= min_score]

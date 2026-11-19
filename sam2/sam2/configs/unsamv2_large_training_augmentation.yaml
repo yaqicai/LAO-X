@@ -1,4 +1,6 @@
 # @package _global_
+# Paths: LAOX_DATA_ROOT (datasets), LAOX_RESULTS_ROOT (results) and LAOX_CKPT_ROOT
+# (checkpoints); relative defaults resolve against the working directory.
 
 scratch:
   resolution: 1024
@@ -10,20 +12,17 @@ scratch:
   vision_lr: 1.5e-6
   phases_per_epoch: 1
   num_epochs: ${int:${oc.env:TOTAL_EPOCHS,20}}
-  checkpoint_path: ${oc.env:INIT_CKPT,"/path/to/LAO-X/sam2/checkpoints/sam2.1_hiera_large.pt"}
+  checkpoint_path: ${oc.env:INIT_CKPT,"${oc.env:LAOX_CKPT_ROOT,checkpoints}/sam2.1_hiera_large.pt"}
 
 paths:
-  img_folder: ${oc.env:IMG_FOLDER,"/path/to/datasets/det_compass_xp/xray"}
-  gt_folder: ${oc.env:GT_FOLDER,"/path/to/LAO-X/results/cutler_musc"}
-  experiment_log_dir: ${oc.env:EXPERIMENT_LOG_DIR,"/path/to/LAO-X/results/train/det_compass_xp_cutler_musc_N1_gra10/log"}
+  img_folder: ${oc.env:IMG_FOLDER,"${oc.env:LAOX_DATA_ROOT,datasets}/det_compass_xp/xray"}
+  gt_folder: ${oc.env:GT_FOLDER,"${oc.env:LAOX_RESULTS_ROOT,results}/cutler_musc"}
+  experiment_log_dir: ${oc.env:EXPERIMENT_LOG_DIR,"${oc.env:LAOX_RESULTS_ROOT,results}/train/det_compass_xp_cutler_musc_N1_gra10/log"}
 
 dataset:
   # PATHS to Dataset
-  # img_folder: "/home/yujunwei/UnSAM/sa1b_023_data/images"
-  # gt_folder: "/home/yujunwei/dinov3_gra/sa1b_gt_results_real/combined"
   img_folder: ${paths.img_folder}
   gt_folder: ${paths.gt_folder}
-  # "/path/to/LAO-X/results/cutler/det_compass_xp/granularity_divide_and_conquer_100/vis"
   lineidx_file: null
   tsv_file: null
   multiplier: 2

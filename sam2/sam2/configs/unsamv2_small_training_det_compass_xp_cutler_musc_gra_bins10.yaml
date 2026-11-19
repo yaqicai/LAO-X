@@ -1,4 +1,6 @@
 # @package _global_
+# Paths: LAOX_DATA_ROOT (datasets), LAOX_RESULTS_ROOT (results) and LAOX_CKPT_ROOT
+# (checkpoints); relative defaults resolve against the working directory.
 
 scratch:
   resolution: 1024
@@ -10,15 +12,12 @@ scratch:
   vision_lr: 3e-6
   phases_per_epoch: 1
   num_epochs: 20
-  checkpoint_path: "/path/to/LAO-X/sam2/checkpoints/sam2.1_hiera_small.pt"
+  checkpoint_path: ${oc.env:LAOX_CKPT_ROOT,checkpoints}/sam2.1_hiera_small.pt
 
 dataset:
   # PATHS to Dataset
-  # img_folder: "/home/yujunwei/UnSAM/sa1b_023_data/images"
-  # gt_folder: "/home/yujunwei/dinov3_gra/sa1b_gt_results_real/combined"
-  img_folder: "/path/to/datasets/det_compass_xp/xray"
-  gt_folder: "/path/to/LAO-X/results/cutler_musc_gra_bins10"
-  # "/path/to/LAO-X/results/cutler/det_compass_xp/granularity_divide_and_conquer_100/vis"
+  img_folder: ${oc.env:LAOX_DATA_ROOT,datasets}/det_compass_xp/xray
+  gt_folder: ${oc.env:LAOX_RESULTS_ROOT,results}/cutler_musc_gra_bins10
   lineidx_file: null
   tsv_file: null
   multiplier: 2
@@ -312,7 +311,7 @@ trainer:
 launcher:
   num_nodes: 1
   gpus_per_node: 1
-  experiment_log_dir: /path/to/LAO-X/results/train/det_compass_xp_cutler_musc_N1_gra_bins10/log # Path to log directory, defaults to ./sam2_logs/${config_name}
+  experiment_log_dir: ${oc.env:LAOX_RESULTS_ROOT,results}/train/det_compass_xp_cutler_musc_N1_gra_bins10/log # Path to log directory, defaults to ./sam2_logs/${config_name}
 
 # SLURM args if running on a cluster
 submitit:

@@ -5,10 +5,10 @@
 | UnSAMv2 | repository root, `evaluation/`, `granularity_divide_and_conquer/` | [yujunwei04/UnSAMv2](https://github.com/yujunwei04/UnSAMv2) | — | Apache-2.0 ([LICENSE](LICENSE)) | yes |
 | SAM 2 | `sam2/` | [facebookresearch/sam2](https://github.com/facebookresearch/sam2) | — | Apache-2.0 ([sam2/LICENSE](sam2/LICENSE)); cc_torch BSD-3-Clause ([sam2/LICENSE_cctorch](sam2/LICENSE_cctorch)) | yes |
 | Mask2Former ops / CutLER configs used by divide-and-conquer | `granularity_divide_and_conquer/` | via UnSAMv2 | — | see upstream | no |
-| MuSc | `third_party/MuSc/` | [xrli-U/MuSc](https://github.com/xrli-U/MuSc) | `72d58ad` | MIT ([LICENSE](third_party/MuSc/LICENSE)) | yes |
-| CutLER | `third_party/CutLER/` | [facebookresearch/CutLER](https://github.com/facebookresearch/CutLER) | `cca0a27` | CC BY-NC-SA 4.0 ([LICENSE](third_party/CutLER/LICENSE)) | yes |
+| MuSc | `third_party/MuSc/` | [xrli-U/MuSc](https://github.com/xrli-U/MuSc) | `72d58ad` | MIT ([LICENSE](third_party/MuSc/LICENSE)) | yes, see [LAOX_CHANGES.md](third_party/MuSc/LAOX_CHANGES.md) |
+| CutLER | `third_party/CutLER/` | [facebookresearch/CutLER](https://github.com/facebookresearch/CutLER) | `cca0a27` | CC BY-NC-SA 4.0 ([LICENSE](third_party/CutLER/LICENSE)) | yes, see [LAOX_CHANGES.md](third_party/CutLER/LAOX_CHANGES.md) |
 | TokenCut | `third_party/CutLER/third_party/TokenCut/` | [YangtaoWANG95/TokenCut](https://github.com/YangtaoWANG95/TokenCut) | — | MIT | no |
-| DET-COMPASS-CROPS | `dependencies/det_compass_crops/` | Lorenzo Vaquero, DET-COMPASS-CROPS | `3932fc1` | used with the author's permission | yes |
+| DET-COMPASS-CROPS | `synthesis/` | Lorenzo Vaquero, DET-COMPASS-CROPS | `3932fc1` | used with the author's permission | yes |
 | Detectron2 (xyz fork) | not vendored; installed by `environment/rebuild_environment.sh` | [MaureenZOU/detectron2-xyz](https://github.com/MaureenZOU/detectron2-xyz) | `42121d7` | Apache-2.0 | no |
 | DINOv3 | not vendored; cloned into `granularity_divide_and_conquer/dinov3` | [facebookresearch/dinov3](https://github.com/facebookresearch/dinov3) | `54694f7` | DINOv3 License | no |
 

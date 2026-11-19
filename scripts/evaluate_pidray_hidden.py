@@ -1,11 +1,18 @@
 #!/usr/bin/env python3
-"""Evaluate saved any-object predictions on the PIDray hidden subset."""
+"""Evaluate saved any-object predictions on the PIDray hidden subset.
+
+Paths: annotations from ``$LAOX_DATA_ROOT/pidray/annotations`` (default
+``<repo>/datasets``); predictions from ``$LAOX_OUTPUT_EVAL`` (default
+``<repo>/output_eval``); SAM 3 predictions from ``$SAM3_OUTPUT_EVAL``
+(default: same as ``$LAOX_OUTPUT_EVAL``).
+"""
 
 from __future__ import annotations
 
 import argparse
 import csv
 import json
+import os
 import sys
 from copy import deepcopy
 from pathlib import Path
@@ -13,30 +20,29 @@ from pathlib import Path
 from pycocotools.coco import COCO
 from pycocotools.cocoeval import COCOeval
 
-PROJECT_ROOT = Path("/path/to/LAO-X")
-DATA_ROOT = Path("/path/to/datasets/pidray/annotations")
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+DATA_ROOT = Path(os.environ.get("LAOX_DATA_ROOT", PROJECT_ROOT / "datasets")) / "pidray" / "annotations"
+OUTPUT_EVAL_ROOT = Path(os.environ.get("LAOX_OUTPUT_EVAL", PROJECT_ROOT / "output_eval"))
+SAM3_OUTPUT_EVAL_ROOT = Path(os.environ.get("SAM3_OUTPUT_EVAL", OUTPUT_EVAL_ROOT))
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from util_xray import _apply_region_protocol, _get_protocol_preset
 
 DEFAULT_PREDICTIONS = {
-    "SAM2": Path(
-        "/path/to/results/output_eval/"
-        "pidray_img0_18220_sam2/coco_instances_results.json"
-    ),
-    "SAM3": Path(
-        "/path/to/sam3/output_eval/"
-        "pidray_img0_18220_sam3_1.0/coco_instances_results.json"
-    ),
-    "LAO-X": Path(
-        "/path/to/results/output_eval/"
+    "SAM2": OUTPUT_EVAL_ROOT
+    / "pidray_img0_18220_sam2"
+    / "coco_instances_results.json",
+    "SAM3": SAM3_OUTPUT_EVAL_ROOT
+    / "pidray_img0_18220_sam3_1.0"
+    / "coco_instances_results.json",
+    "LAO-X": OUTPUT_EVAL_ROOT
+    / (
         "pidray_img0_18220_unsamv2_0.5_"
-        "det_compass_xp_divide_and_conquer_1000_m0.5/"
-        "coco_instances_results.json"
-    ),
-    "UnSAMv2": PROJECT_ROOT
-    / "output_eval"
+        "det_compass_xp_divide_and_conquer_1000_m0.5"
+    )
+    / "coco_instances_results.json",
+    "UnSAMv2": OUTPUT_EVAL_ROOT
     / (
         "pidray_img0_18220_unsamv2_1.0_augmentation_restart_"
         "crop_musc_aug_fusion_bs16_xp_extreme_m0.5_48"
@@ -150,12 +156,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--full-json",
         type=Path,
-        default=PROJECT_ROOT / "output_eval" / "temp_pidray_val_0_18220.json",
+        default=OUTPUT_EVAL_ROOT / "temp_pidray_val_0_18220.json",
     )
     parser.add_argument(
         "--output-dir",
         type=Path,
-        default=PROJECT_ROOT / "output_eval" / "pidray_hidden_eval",
+        default=OUTPUT_EVAL_ROOT / "pidray_hidden_eval",
     )
     return parser.parse_args()
 

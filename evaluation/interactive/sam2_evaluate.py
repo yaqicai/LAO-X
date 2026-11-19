@@ -142,7 +142,6 @@ def parse_args():
         type=str,
         default=None,
         help='config file for SAM that is used for inference.')
-    # parser.add_argument('--sam2-cfg', action='store_true', default=False)
     parser.add_argument('--oracle', action='store_true', default=False)
     parser.add_argument(
         '--config-path', type=str, default='./config.yml', help='The path to the config file.')

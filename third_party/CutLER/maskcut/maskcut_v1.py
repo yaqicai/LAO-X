@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
 # Copyright (c) Meta Platforms, Inc. and affiliates.
+# LAO-X: experimental variant of maskcut.py (centre-bias partition flip, patch size 14,
+# --pretrain-type in the output json name). The dinov2/dinov3/clip branches call
+# dino.ViTFeat_new, which is not part of this release; only --pretrain-type dino runs.
 
 import os
 import sys
@@ -180,19 +183,6 @@ def maskcut(img_path, backbone, patch_size, tau, N=1, fixed_size=480, cpu=False)
     tensor = ToTensor(I_resize).unsqueeze(0)
     if not cpu: tensor = tensor.cuda()
     feat = backbone(tensor)[0] # 768 * 3600
-
-    # UpSampling Feature with AnyUp
-    # upsampler = torch.hub.load('wimmerth/anyup', 'anyup_multi_backbone', use_natten=True)
-    # dim, num_patch = feat.size()[0], feat.size()[1]
-    # feats = feat.clone().view(dim, feat_w, feat_h).unsqueeze(0).cpu()
-    # scale = 4
-    # hr_image = I.resize((int(fixed_size / scale), int(fixed_size / scale)), PIL.Image.LANCZOS)
-    # hr_image_arr = np.array(hr_image).astype(np.float32) / 255.0
-    # hr_image_arr = torch.from_numpy(hr_image_arr).permute(2,0,1).unsqueeze(0)
-    # hr_features = upsampler(hr_image_arr, feats)
-    # patch_size = scale
-    # feat_h, feat_w = hr_features.size()[2], hr_features.size()[3]
-    # feat = hr_features.view(dim, feat_h * feat_w).detach()
 
     _, bipartition, eigvec = maskcut_forward(
         feat,
@@ -397,8 +387,6 @@ if __name__ == "__main__":
             dinov3_repo=args.dinov3_repo,
             dinov3_model=args.dinov3_model,
         )
-        # DINO_DIR = "/path/to/LAO-X/granularity_divide_and_conquer/dinov3"
-        # backbone = dinov3 = torch.hub.load(DINO_DIR, 'dinov3_vitb16', source='local', weights=args.pretrain_path)
     else:
         backbone = dino.ViTFeat(url, feat_dim, args.vit_arch, args.vit_feat, args.patch_size)
 
@@ -427,18 +415,9 @@ if __name__ == "__main__":
         for img_name in tqdm(img_list) :
             # get image path
             img_path = os.path.join(args.img_dir, img_name)
-            # get pseudo-masks for each image using MaskCut
-            # try:
+            # get pseudo-masks for each image using MaskCut (errors are not skipped)
             bipartitions, _, I_new = maskcut(img_path, backbone, args.patch_size, \
                 args.tau, N=args.N, fixed_size=args.fixed_size, cpu=args.cpu)
-            # except:
-            #     print(f'Skipping {img_name}')
-            #     continue
-            # except Exception as e:
-            #     print(f'\n[ERROR] Processing {img_name}')
-                
-            #     traceback.print_exc()
-            #     continue
             I = Image.open(img_path).convert('RGB')
             width, height = I.size
             for idx, bipartition in enumerate(bipartitions):

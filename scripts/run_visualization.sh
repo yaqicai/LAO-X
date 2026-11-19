@@ -1,18 +1,25 @@
 #!/usr/bin/env bash
+# Per-image AP comparison and qualitative figures for several methods
+# (util_xray.merge_image_ap_by_suffix / visualization_select) on the
+# cross-dataset benchmarks. Methods, granularities and datasets are configured
+# in the aligned arrays below; VIS_IMAGE_IDS_MATRIX holds the images shown in
+# the paper (set it to an empty string to select images by AP instead).
+# Prediction roots: OUTPUT_EVAL_DIR [${LAOX_OUTPUT_EVAL:-<repo>/output_eval}],
+# OUTPUT_EVAL_DIR_OURS [OUTPUT_EVAL_DIR], OUTPUT_EVAL_DIR_SAM3 [${SAM3_OUTPUT_EVAL:-OUTPUT_EVAL_DIR}]
+# (SAM 3 predictions are produced outside this repository).
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 cd "${REPO_ROOT}"
 
-OUTPUT_EVAL_DIR_OURS="${OUTPUT_EVAL_DIR:-/path/to/LAO-X/output_eval}"
-OUTPUT_EVAL_DIR_SAM3="${OUTPUT_EVAL_DIR_SAM3:-/path/to/sam3/output_eval}"
-OUTPUT_EVAL_DIR="${OUTPUT_EVAL_DIR:-/path/to/results/output_eval}"
-# OUTPUT_EVAL_DIR_SAM3="${OUTPUT_EVAL_DIR_SAM3:-/path/to/results/sam3/output_eval}"
+OUTPUT_EVAL_DIR="${OUTPUT_EVAL_DIR:-${LAOX_OUTPUT_EVAL:-${REPO_ROOT}/output_eval}}"
+OUTPUT_EVAL_DIR_OURS="${OUTPUT_EVAL_DIR_OURS:-${OUTPUT_EVAL_DIR}}"
+OUTPUT_EVAL_DIR_SAM3="${OUTPUT_EVAL_DIR_SAM3:-${SAM3_OUTPUT_EVAL:-${OUTPUT_EVAL_DIR}}}"
 
 START_ID="${START_ID:-0}"
 VIS_AP1="${VIS_AP1:-0}"
-OUTPUT_VIS_DIR="${OUTPUT_VIS_DIR:-/path/to/LAO-X/output_visualization_reorganized}"
+OUTPUT_VIS_DIR="${OUTPUT_VIS_DIR:-${REPO_ROOT}/output_visualization_reorganized}"
 VIS_SCORE_THRESH="${VIS_SCORE_THRESH:-0.0}"
 AP_PROTOCOL_PRESET="${AP_PROTOCOL_PRESET:-s3_r1p5_center}"
 VIS_GROUP_BY_GT_REGION="${VIS_GROUP_BY_GT_REGION:-1}"
@@ -74,20 +81,14 @@ fi
 # Optional manual image-id matrix aligned to DATASETS.
 # Format: row1;row2;...;rowN, where each row is comma-separated ids.
 # Example (5 datasets): "12,35,91;7,8;101;55,66,77;9001"
-
-# VIS_IMAGE_IDS_MATRIX="${VIS_IMAGE_IDS_MATRIX:-}"
-VIS_IMAGE_IDS_MATRIX="78,204,225,271,312,336,408,428;259,439,593,1011,1090,1159,1630,2162,2204,2224,2228,2242,2342,2405,2410,2763,2941,3135,3406,3577,3615,3652,3738,3740,3786,3790,3802,3959,3992,4078,4186,4264,4604,5244,5278,5296,5364,5645,5661;419,459,471,532,544,732,963,1007,1019,1134;7331,7420,7536,7573,8128,8848;170,919,1232,1500,1506,1570,2310,2775,2866,3089,3171,3559,3713,4015,5853,6310,6565,8105,8115,13518,14472,15294,15295,25747,18079"
-
-
+VIS_IMAGE_IDS_MATRIX="${VIS_IMAGE_IDS_MATRIX-78,204,225,271,312,336,408,428;259,439,593,1011,1090,1159,1630,2162,2204,2224,2228,2242,2342,2405,2410,2763,2941,3135,3406,3577,3615,3652,3738,3740,3786,3790,3802,3959,3992,4078,4186,4264,4604,5244,5278,5296,5364,5645,5661;419,459,471,532,544,732,963,1007,1019,1134;7331,7420,7536,7573,8128,8848;170,919,1232,1500,1506,1570,2310,2775,2866,3089,3171,3559,3713,4015,5853,6310,6565,8105,8115,13518,14472,15294,15295,25747,18079}"
 
 # Arrays must be aligned one-to-one (suffix <-> model_name <-> gra row).
 SUFFIXES=(
-  # "_augmentation_restart_crop_musc_aug_fusion_bs16_extreme_m0.5_48"
   "_augmentation_restart_crop_musc_aug_fusion_bs16_xp_extreme_m0.5_48"
   "_det_compass_xp_divide_and_conquer_1000_m0.5"
   "_sam2"
   "_sam3"
-  # "_augmentation_restart_crop_musc_aug_fusion_bs16_extreme_xp_m0.5_48"
 )
 
 MODEL_NAMES=(
@@ -104,23 +105,8 @@ METHOD_ALIASES=(
   "sam3"
 )
 
-# Each row has 6 GRA values aligned to DATASETS order.
-# GRAS_BY_METHOD=(
-#   "1.0,0.8,0.2,1.0,0.4,1.0"
-#   "0.7,0.5,0.3,0.3,0.3,0.5"
-#   "0.0,0.0,0.0,0.0,0.0,0.0"
-#   "0.0,0.0,0.0,0.0,0.0,0.0"
-# )
-
-# # Standard COCO evaluation
-# GRAS_BY_METHOD=(
-#   "0.8,0.2,1.0,0.4,1.0"
-#   "0.5,0.3,0.3,0.3,0.5"
-#   "0.0,0.0,0.0,0.0,0.0"
-#   "0.0,0.0,0.0,0.0,0.0"
-# )
-
-# S3_R1P5_CENTER protocol evaluation
+# One GRA value per dataset (aligned to DATASETS) for each method; these are the
+# best granularities under the s3_r1p5_center protocol.
 GRAS_BY_METHOD=(
   "1.0,1.0,1.0,0.3,1.0"
   "0.5,0.3,0.3,0.3,0.5"
@@ -129,29 +115,12 @@ GRAS_BY_METHOD=(
 )
 
 DATASETS=(
-  # det_compass_xp
   CLCXray
   DvXray
   PIXray
   HiXray
   pidray
 )
-
-# GRAS_BY_METHOD=(
-#   "0.8,0.2,0.4"
-#   "0.5,0.3,0.3"
-#   "0.0,0.0,0.0"
-#   "0.0,0.0,0.0"
-# )
-
-# DATASETS=(
-#   # det_compass_xp
-#   CLCXray
-#   DvXray
-#   # PIXray
-#   HiXray
-#   # pidray
-# )
 
 get_end_id() {
   local dataset="$1"
@@ -226,7 +195,7 @@ for di in "${!DATASETS[@]}"; do
   done
   OUTPUT_DIRS_PY=$(printf "'%s', " "${OUTPUT_DIRS[@]}")
 
-  python - <<PY
+  "${PYTHON:-python}" - <<PY
 import os
 from util_xray import merge_image_ap_by_suffix, select_image_ids_by_ap_gap, visualization_select
 

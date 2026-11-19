@@ -14,6 +14,8 @@ from pycocotools.cocoeval import COCOeval
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+CKPT_ROOT = Path(os.environ.get("LAOX_CKPT_ROOT", REPO_ROOT / "checkpoints"))
+RESULTS_ROOT = Path(os.environ.get("LAOX_RESULTS_ROOT", REPO_ROOT / "results"))
 
 
 def _add_sam2_to_sys_path() -> None:
@@ -312,7 +314,7 @@ def parse_args():
     parser.add_argument("--pred-iou-max", type=float, default=0.95)
     parser.add_argument("--pred-iou-step", type=float, default=0.05)
     parser.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
-    parser.add_argument("--checkpoint", default=str(REPO_ROOT / "sam2/checkpoints/sam2.1_hiera_small.pt"))
+    parser.add_argument("--checkpoint", default=str(CKPT_ROOT / "sam2.1_hiera_small.pt"))
     parser.add_argument("--model-config", default="configs/sam2.1/sam2.1_hiera_s.yaml")
     parser.add_argument("--points-per-side", type=int, default=64)
     parser.add_argument("--points-per-batch", type=int, default=512)
@@ -327,8 +329,8 @@ def parse_args():
     parser.add_argument("--use-m2m", action="store_true")
     parser.add_argument("--no-multimask-output", action="store_true")
     parser.add_argument("--gra", type=float, default=1.0)
-    parser.add_argument("--output-dir", default=str(REPO_ROOT / "results_pred_iou_thresh_sam2"))
-    parser.add_argument("--pred-iou-thresh", type=float, default=0.77) # 0.5
+    parser.add_argument("--output-dir", default=str(RESULTS_ROOT / "pred_iou_thresh_sam2"))
+    parser.add_argument("--pred-iou-thresh", type=float, default=0.77)
     return parser.parse_args()
 
 def _thresholds(args):

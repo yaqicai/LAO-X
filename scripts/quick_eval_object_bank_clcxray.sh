@@ -1,12 +1,22 @@
 #!/usr/bin/env bash
+# Quick CLCXray check of object-bank ablation runs: freezes the latest
+# checkpoint of every ${TRAIN_ROOT}/augmentation_restart_crop_objbank_*_fusion_bs16_seed1
+# experiment (plus an optional reference run), evaluates images
+# [START_ID, END_ID) with test_det_v2.py and summarizes them with
+# scripts/summarize_quick_object_bank_eval.py.
+#
+# Usage: [VAR=value ...] bash scripts/quick_eval_object_bank_clcxray.sh
+# Environment: TRAIN_ROOT [${LAOX_RESULTS_ROOT:-<repo>/results}/train],
+# OUTPUT_ROOT [<repo>/output_eval/quick_object_bank_clcxray], START_ID [0], END_ID [32],
+# GPU [0], GRA [1.0], MASK_THRESHOLD [0.5], REFERENCE_EXPERIMENT, PYTHON [python].
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 cd "${REPO_ROOT}"
 
-PYTHON_BIN="${PYTHON_BIN:-/path/to/conda/envs/UnSAMv2/bin/python}"
-TRAIN_ROOT="${TRAIN_ROOT:-${REPO_ROOT}/results/train}"
+PYTHON_BIN="${PYTHON_BIN:-${PYTHON:-python}}"
+TRAIN_ROOT="${TRAIN_ROOT:-${LAOX_RESULTS_ROOT:-${REPO_ROOT}/results}/train}"
 OUTPUT_ROOT="${OUTPUT_ROOT:-${REPO_ROOT}/output_eval/quick_object_bank_clcxray}"
 START_ID="${START_ID:-0}"
 END_ID="${END_ID:-32}"
@@ -16,7 +26,7 @@ MASK_THRESHOLD="${MASK_THRESHOLD:-0.5}"
 NUM_WORKERS="${NUM_WORKERS:-2}"
 EVAL_SEED="${EVAL_SEED:-1}"
 INCLUDE_REFERENCE="${INCLUDE_REFERENCE:-1}"
-REFERENCE_EXPERIMENT="${REFERENCE_EXPERIMENT:-/path/to/results/train/augmentation_restart_crop_musc_aug_fusion_bs16_xp}"
+REFERENCE_EXPERIMENT="${REFERENCE_EXPERIMENT:-${TRAIN_ROOT}/augmentation_restart_crop_musc_aug_fusion_bs16_xp}"
 REFERENCE_STAGE="${REFERENCE_STAGE:-extreme}"
 RUN_ID="${RUN_ID:-$(date +%Y%m%d_%H%M%S)}"
 RUN_DIR="${OUTPUT_ROOT}/${RUN_ID}"
@@ -25,8 +35,8 @@ SNAPSHOT_ROOT="${RUN_DIR}/checkpoints"
 LOG_ROOT="${RUN_DIR}/logs"
 MANIFEST="${RUN_DIR}/manifest.tsv"
 
-if [[ ! -x "${PYTHON_BIN}" ]]; then
-  echo "Python is not executable: ${PYTHON_BIN}" >&2
+if ! command -v "${PYTHON_BIN}" >/dev/null 2>&1; then
+  echo "Python interpreter not found: ${PYTHON_BIN}" >&2
   exit 1
 fi
 if (( END_ID <= START_ID )); then
