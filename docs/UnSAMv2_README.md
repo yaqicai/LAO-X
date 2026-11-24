@@ -2,7 +2,7 @@
 > [UnSAMv2](https://github.com/yujunwei04/UnSAMv2) project that LAO-X builds on,
 > kept for reference. Image links point to the upstream repository's assets.
 > For LAO-X commands and paths see the [main README](../README.md); for example,
-> `granularity_divide_and_conquer/run_gra_dico.sh` now takes the dataset and
+> `granularity_divide_and_conquer/run.sh` now takes the dataset and
 > stage as arguments and reads checkpoints from `$LAOX_CKPT_ROOT`.
 
 <p align="center">
@@ -59,10 +59,10 @@ UnSAMv2 has two stages. (1) We generate pseudo mask-granularity pairs with granu
 ### 1. Granularity-Aware Divide-and-Conquer ✌️
 To run granularity-aware divide-and-conquer, please download CutLER's weights [here](http://dl.fbaipublicfiles.com/cutler/checkpoints/cutler_cascade_final.pth)
 
-Then, specify the input, output, and checkpoint path in the [script](../granularity_divide_and_conquer/run_gra_dico.sh) and run
+Then, specify the input, output, and checkpoint path in the [script](../granularity_divide_and_conquer/run.sh) and run
 ```bash
 cd granularity_divide_and_conquer
-bash run_gra_dico.sh
+bash run.sh
 ```
 
 ### 2. Segment Anything at Any Granularity 🔥

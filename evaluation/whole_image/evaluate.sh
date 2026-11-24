@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# COCO evaluation of the per-image JSON files written by run_coco_annotator.sh.
-# Usage: GT_FILE=<coco_gt.json> bash evaluate.sh [extra check.py args]
+# COCO evaluation of the per-image JSON files written by predict.sh.
+# Usage: GT_FILE=<coco_gt.json> bash evaluate.sh [extra evaluate.py args]
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -14,7 +14,7 @@ if [[ -z "${GT_FILE:-}" ]]; then
   exit 1
 fi
 
-"${PYTHON}" "${SCRIPT_DIR}/check.py" \
+"${PYTHON}" "${SCRIPT_DIR}/evaluate.py" \
     --predict-directory "${PREDICT_DIR}" \
     --gt-file "${GT_FILE}" \
     "$@"

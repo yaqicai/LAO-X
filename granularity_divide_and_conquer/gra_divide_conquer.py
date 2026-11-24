@@ -7,7 +7,7 @@ Writes one COCO-style JSON per image to --output-dir.
 
 Checkpoints default to $LAOX_CKPT_ROOT (default: <repo>/checkpoints); the DINOv3
 repository is expected at <this dir>/dinov3 (see INSTALL.md).
-Usually launched through run_gra_dico.sh.
+Usually launched through run.sh.
 """
 from collections import defaultdict
 import os

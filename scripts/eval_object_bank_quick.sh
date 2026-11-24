@@ -2,10 +2,10 @@
 # Quick CLCXray check of object-bank ablation runs: freezes the latest
 # checkpoint of every ${TRAIN_ROOT}/augmentation_restart_crop_objbank_*_fusion_bs16_seed1
 # experiment (plus an optional reference run), evaluates images
-# [START_ID, END_ID) with test_det_v2.py and summarizes them with
-# scripts/summarize_quick_object_bank_eval.py.
+# [START_ID, END_ID) with evaluate.py and summarizes them with
+# scripts/summarize_object_bank_quick.py.
 #
-# Usage: [VAR=value ...] bash scripts/quick_eval_object_bank_clcxray.sh
+# Usage: [VAR=value ...] bash scripts/eval_object_bank_quick.sh
 # Environment: TRAIN_ROOT [${LAOX_RESULTS_ROOT:-<repo>/results}/train],
 # OUTPUT_ROOT [<repo>/output_eval/quick_object_bank_clcxray], START_ID [0], END_ID [32],
 # GPU [0], GRA [1.0], MASK_THRESHOLD [0.5], REFERENCE_EXPERIMENT, PYTHON [python].
@@ -126,7 +126,7 @@ for experiment_dir in "${EXPERIMENT_DIRS[@]}"; do
   if CUDA_VISIBLE_DEVICES="${GPU}" \
       CUBLAS_WORKSPACE_CONFIG="${CUBLAS_WORKSPACE_CONFIG:-:4096:8}" \
       PYTHONHASHSEED="${EVAL_SEED}" \
-      "${PYTHON_BIN}" test_det_v2.py \
+      "${PYTHON_BIN}" evaluate.py \
         --method unsamv2 \
         --dataset CLCXray \
         --sam2-ckpt "${snapshot}" \
@@ -164,7 +164,7 @@ for experiment_dir in "${EXPERIMENT_DIRS[@]}"; do
     >> "${MANIFEST}"
 done
 
-"${PYTHON_BIN}" scripts/summarize_quick_object_bank_eval.py \
+"${PYTHON_BIN}" scripts/summarize_object_bank_quick.py \
   --manifest "${MANIFEST}" \
   --start-id "${START_ID}" \
   --end-id "${END_ID}" \

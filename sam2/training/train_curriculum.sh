@@ -41,13 +41,13 @@
 #   --num-gpus N              GPUs per run (default: number of GPUs in
 #                             CUDA_VISIBLE_DEVICES/GPUS, otherwise 8)
 #   --seed N                  training seed, TRAIN_SEED/PYTHONHASHSEED (default: 1)
-#   --config NAME             Hydra config (default: configs/unsamv2_small_training_augmentation.yaml)
+#   --config NAME             Hydra config (default: configs/train_laox_small.yaml)
 #   --log-root DIR            default: ${LAOX_RESULTS_ROOT}/train/augmentation_restart
 #
 # Environment: LAOX_DATA_ROOT, LAOX_RESULTS_ROOT, LAOX_CKPT_ROOT (default
 # <repo>/datasets, <repo>/results, <repo>/checkpoints), INIT_CKPT (default
 # ${LAOX_CKPT_ROOT}/sam2.1_hiera_small.pt; use the Hiera-L checkpoint with
-# configs/unsamv2_large_training_augmentation.yaml), PYTHON (default python),
+# configs/train_laox_large.yaml), PYTHON (default python),
 # CUDA_VISIBLE_DEVICES or GPUS.
 set -e
 
@@ -61,7 +61,7 @@ export LAOX_CKPT_ROOT="${LAOX_CKPT_ROOT:-${REPO_ROOT}/checkpoints}"
 
 DATA_ROOT_NAME=""
 LOG_ROOT="${LOG_ROOT:-${LAOX_RESULTS_ROOT}/train/augmentation_restart}"
-CONFIG="configs/unsamv2_small_training_augmentation.yaml"
+CONFIG="configs/train_laox_small.yaml"
 COMMENT=""
 ANNO_COMMENT=""
 STAGES_CSV=""

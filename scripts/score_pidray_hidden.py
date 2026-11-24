@@ -27,7 +27,7 @@ SAM3_OUTPUT_EVAL_ROOT = Path(os.environ.get("SAM3_OUTPUT_EVAL", OUTPUT_EVAL_ROOT
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from util_xray import _apply_region_protocol, _get_protocol_preset
+from xray_utils import _apply_region_protocol, _get_protocol_preset
 
 DEFAULT_PREDICTIONS = {
     "SAM2": OUTPUT_EVAL_ROOT

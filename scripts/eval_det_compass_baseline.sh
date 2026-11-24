@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # Evaluate a single-run UnSAMv2 model trained directly on DET-COMPASS pseudo-labels
-# (sam2/training/train.sh configs/unsamv2_small_training_det_compass_xp*.yaml).
+# (sam2/training/train.sh configs/train_det_compass_*.yaml).
 #
-# Usage: [VAR=value ...] bash scripts/task_test_det_compass_xp.sh [RUN_NAME]
+# Usage: [VAR=value ...] bash scripts/eval_det_compass_baseline.sh [RUN_NAME]
 # Checkpoint: ${TRAIN_ROOT}/det_compass_xp_<RUN_NAME>/log/checkpoints/checkpoint.pt
 # (TRAIN_ROOT default ${LAOX_RESULTS_ROOT}/train), e.g. RUN_NAME=divide_and_conquer_1000_clean
-# for configs/unsamv2_small_training_det_compass_xp.yaml.
+# for configs/train_det_compass_small.yaml.
 # Environment: DATASET [det_compass_xp], GRAS [0.1,...,1.0], GPUS [0],
 # MASK_THRESHOLD [0], START_ID [0], END_ID [full test split], PYTHON [python].
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -58,7 +58,7 @@ run_eval() {
   echo "[eval] dataset=${DATASET} gra=${gra} gpu=${gpu} ckpt=${ckpt_path}"
   CUDA_VISIBLE_DEVICES="${gpu}" \
     SAM2_PROFILE="${SAM2_PROFILE}" \
-    "${PYTHON}" test_det_v2.py \
+    "${PYTHON}" evaluate.py \
       --method unsamv2 \
       --dataset "${DATASET}" \
       --sam2-ckpt "${ckpt_path}" \

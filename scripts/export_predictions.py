@@ -93,7 +93,7 @@ def parse_matrix(matrix_str):
 
 def resolve_gra_list_for_dataset(dataset):
     if dataset not in DEFAULT_DATASETS:
-        raise ValueError(f"Dataset not in default run_visualization list: {dataset}")
+        raise ValueError(f"Dataset not in default compare_methods list: {dataset}")
     dataset_idx = DEFAULT_DATASETS.index(dataset)
     gra_list = []
     for row in DEFAULT_GRAS_BY_METHOD:
@@ -209,7 +209,7 @@ def main():
     payload = {
         "meta": {
             "created_at": datetime.now().isoformat(timespec="seconds"),
-            "source_script": "scripts/run_visualization.sh",
+            "source_script": "scripts/compare_methods.sh",
             "dataset": dataset,
             "image_id": int(image_id),
             "start_id": int(args.start_id),

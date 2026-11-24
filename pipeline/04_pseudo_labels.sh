@@ -7,8 +7,8 @@ source "$(dirname "${BASH_SOURCE[0]}")/env.sh"
 cd "${LAOX_REPO}"
 for stage in ${STAGES}; do
   require_file "${LAOX_DATA_ROOT}/${SYN_DATASET}/${stage}/anno_cutler"
-  "${PYTHON}" pseudo_label_generate.py --to-agnostic --dataset "${SYN_DATASET}" --stage "${stage}"
-  "${PYTHON}" pseudo_label_generate.py --dataset "${SYN_DATASET}" --coco-name coco_agnostic.json --stage "${stage}"
-  "${PYTHON}" pseudo_label_generate.py --fusion --fusion-name anno_fusion --dataset "${SYN_DATASET}" \
+  "${PYTHON}" make_pseudo_labels.py --to-agnostic --dataset "${SYN_DATASET}" --stage "${stage}"
+  "${PYTHON}" make_pseudo_labels.py --dataset "${SYN_DATASET}" --coco-name coco_agnostic.json --stage "${stage}"
+  "${PYTHON}" make_pseudo_labels.py --fusion --fusion-name anno_fusion --dataset "${SYN_DATASET}" \
     --stage "${stage}" --fusion-overlap-thresh 0.95
 done

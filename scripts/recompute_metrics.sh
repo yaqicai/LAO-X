@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Recompute COCO / X-ray protocol metrics (xlsx) for saved predictions in
-# output_eval with util_xray.evaluate_output_eval_metrics.
+# output_eval with xray_utils.evaluate_output_eval_metrics.
 #
-# Usage: [VAR=value ...] bash scripts/run_eval_metrics_batch.sh
+# Usage: [VAR=value ...] bash scripts/recompute_metrics.sh
 #   SUFFIX_SET   main (default) | ablation   predefined run suffixes below
 #   SUFFIXES     comma-separated run suffixes (overrides SUFFIX_SET)
 #   DATASETS     comma-separated datasets [det_compass_xp,CLCXray,DvXray,PIXray,HiXray,pidray]
@@ -105,7 +105,7 @@ for SUFFIX in "${EXPANDED_SUFFIXES[@]}"; do
       DATASET_END_ID="$(get_end_id "${DATASET}")"
     fi
     "${PYTHON:-python}" - <<PY
-from util_xray import evaluate_output_eval_metrics
+from xray_utils import evaluate_output_eval_metrics
 
 def _parse_csv(raw, cast=None):
     raw = str(raw).strip()

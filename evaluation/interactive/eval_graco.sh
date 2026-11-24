@@ -20,7 +20,7 @@ CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-0,1,2,3,4,5,6,7}" \
 "${PYTHON}" -m torch.distributed.run \
     --nproc_per_node="${NPROC}" \
     --master_port="${MASTER_PORT}" \
-    sam2_evaluate.py NoBRS \
+    eval_graco.py NoBRS \
     --datasets "${DATASETS}" \
     --logs-path "${LOGS_PATH}" \
     --checkpoint "${CHECKPOINT}" \

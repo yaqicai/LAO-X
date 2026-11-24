@@ -18,7 +18,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from util_xray import _apply_region_protocol, _get_protocol_preset
+from xray_utils import _apply_region_protocol, _get_protocol_preset
 
 
 METRICS = {

@@ -6,7 +6,7 @@ import random
 import cv2
 import numpy as np
 
-from compass_editor.colour import has_mask_on_border, sample_to_highlow
+from xray_ops.colour import has_mask_on_border, sample_to_highlow
 
 try:
     import torch

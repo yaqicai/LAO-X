@@ -38,7 +38,7 @@ XrayImgRoot = {
 }
 
 # Validation images and class-agnostic annotations, used by
-# scripts/sweep_pred_iou_thresh_sam2.py to tune pred_iou_thresh.
+# scripts/sweep_sam2_iou_thresh.py to tune pred_iou_thresh.
 XrayImgRootVal = {
     "PIXray": os.path.join(Root, "pixray/PIXray"),
     "CLCXray": os.path.join(Root, "CLCXray/val2017"),

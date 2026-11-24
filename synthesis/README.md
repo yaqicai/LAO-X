@@ -13,9 +13,9 @@ polygon masks for its objects.
 | `run_stage.sh` | Generates one stage: runs parallel workers, then merges their annotations |
 | `generate.py` | Generator with three subcommands: `match`, `augment`, `merge` |
 | `build_luts.py` | Builds the three lookup tables from DET-COMPASS |
-| `compass_editor/` | High/low-energy utilities, LUT rendering and object transforms |
+| `xray_ops/` | High/low-energy utilities, LUT rendering and object transforms |
 | `compare_outputs.py` | Compares two output directories file by file (SHA-256) |
-| `eval_coco_cutler_against_gt.py` | Scores object-bank COCO files against labelled COCO (bbox AP/AR) |
+| `score_object_bank.py` | Scores object-bank COCO files against labelled COCO (bbox AP/AR) |
 
 The CPU-only Python requirements are listed in [INSTALL.md](../INSTALL.md).
 The generator also imports `torch`, but only to seed it.

@@ -5,19 +5,19 @@
 # Usage:
 #   bash sam2/training/train.sh [CONFIG] [extra sam2/training/train.py args]
 #
-# CONFIG (default configs/unsamv2_small_training.yaml) is a config name under
+# CONFIG (default configs/train_unsamv2_small.yaml) is a config name under
 # sam2/sam2/configs, e.g.
-#   configs/unsamv2_small_training_det_compass_xp.yaml
+#   configs/train_det_compass_small.yaml
 #       UnSAMv2 trained directly on DET-COMPASS oversegmentation pseudo-labels
 #       (results/cutler/det_compass_xp/granularity_divide_and_conquer_1000_clean,
 #       test images removed with sam2/training/scripts/copy_non_test_annotations.py);
-#       evaluate with scripts/task_test_det_compass_xp.sh
+#       evaluate with scripts/eval_det_compass_baseline.sh
 #   the same with CutLER(+MuSc) pseudo-label variants:
-#       configs/unsamv2_small_training_det_compass_xp_cutler_musc.yaml
-#       configs/unsamv2_small_training_det_compass_xp_cutler_musc_gra_bins10.yaml
-#       configs/unsamv2_small_training_det_compass_xp_cutler_musc_gra_minmax.yaml
-#       configs/unsamv2_small_training_det_compass_xp_cutler_ori.yaml
-#   configs/unsamv2_small_training_pixray.yaml
+#       configs/train_det_compass_object_bank_small.yaml
+#       configs/train_det_compass_object_bank_bins10_small.yaml
+#       configs/train_det_compass_object_bank_minmax_small.yaml
+#       configs/train_det_compass_cutler_small.yaml
+#   configs/train_pixray_small.yaml
 #       UnSAMv2 trained on PIXray oversegmentation pseudo-labels
 # Data, pseudo-label, checkpoint and log paths are set in the config relative
 # to LAOX_DATA_ROOT / LAOX_RESULTS_ROOT / LAOX_CKPT_ROOT (default
@@ -35,7 +35,7 @@ export LAOX_DATA_ROOT="${LAOX_DATA_ROOT:-${REPO_ROOT}/datasets}"
 export LAOX_RESULTS_ROOT="${LAOX_RESULTS_ROOT:-${REPO_ROOT}/results}"
 export LAOX_CKPT_ROOT="${LAOX_CKPT_ROOT:-${REPO_ROOT}/checkpoints}"
 
-CONFIG="configs/unsamv2_small_training.yaml"
+CONFIG="configs/train_unsamv2_small.yaml"
 if [[ $# -gt 0 && "$1" != -* ]]; then
   CONFIG="$1"
   shift

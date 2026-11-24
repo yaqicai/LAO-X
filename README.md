@@ -32,17 +32,26 @@ synthetic-data generator. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 ├── third_party/MuSc/                 # step 1: anomaly heatmaps (modified MuSc)
 ├── third_party/CutLER/               # step 1: heatmap-guided object masks (modified CutLER)
 ├── synthesis/                        # step 2: single-container X-ray synthesis
-├── granularity_divide_and_conquer/   # step 3: oversegmentation pseudo-labels
-├── pseudo_label_generate.py          # step 4: class-agnostic labels + fusion
-├── util_xray.py, gra_fusion.py       #         COCO / fusion utilities
+├── granularity_divide_and_conquer/   # step 3: oversegmentation pseudo-labels (run.sh)
+├── make_pseudo_labels.py             # step 4: class-agnostic labels + fusion
 ├── sam2/                             # step 5: UnSAMv2 model, configs, curriculum training
-├── test_det_v2.py                    # step 6: whole-image evaluation
-├── scripts/                          #         evaluation, cross-dataset and analysis scripts
-├── evaluation/                       #         interactive (click) evaluation
+├── evaluate.py                       # step 6: whole-image evaluation of trained models
+├── evaluate_sam2_baseline.py         #         zero-shot SAM 2 baseline
+├── visualize.py                      #         draw labels / predictions on images
+├── fuse_granularities.py             #         merge predictions across granularities
+├── xray_utils.py                     #         shared COCO, metric and plotting utilities
+├── config.py                         #         dataset locations
+├── scripts/                          # evaluation, analysis and data-preparation scripts
+├── evaluation/                       # interactive (click) and natural-image evaluation
 ├── ablation/                         # ablation experiments
-├── config.py                         # dataset locations
-└── environment/                      # conda environments
+└── environment/                      # conda environments (setup.sh)
 ```
+
+Script names in `scripts/` start with what they do: `eval_*` runs a model
+and scores it, `score_*` scores saved predictions, `summarize_*` /
+`analyze_*` / `compare_*` build tables and figures, `prepare_*` /
+`convert_*` / `export_*` handle data. Training configs are
+`sam2/sam2/configs/train_*.yaml`.
 
 ## Installation
 

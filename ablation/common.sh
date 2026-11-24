@@ -12,12 +12,12 @@ build_stage() {
     --num-objects "${objects}" --gamma "${gamma}" \
     --num-generated "${NUM_GENERATED:-8000}" --workers "${WORKERS:-16}" --io-workers 2 \
     "$@"
-  bash "${LAOX_REPO}/granularity_divide_and_conquer/run_gra_dico.sh" "${dataset}" "${stage}"
+  bash "${LAOX_REPO}/granularity_divide_and_conquer/run.sh" "${dataset}" "${stage}"
   (
     cd "${LAOX_REPO}"
-    "${PYTHON}" pseudo_label_generate.py --to-agnostic --dataset "${dataset}" --stage "${stage}"
-    "${PYTHON}" pseudo_label_generate.py --dataset "${dataset}" --coco-name coco_agnostic.json --stage "${stage}"
-    "${PYTHON}" pseudo_label_generate.py --fusion --fusion-name anno_fusion --dataset "${dataset}" \
+    "${PYTHON}" make_pseudo_labels.py --to-agnostic --dataset "${dataset}" --stage "${stage}"
+    "${PYTHON}" make_pseudo_labels.py --dataset "${dataset}" --coco-name coco_agnostic.json --stage "${stage}"
+    "${PYTHON}" make_pseudo_labels.py --fusion --fusion-name anno_fusion --dataset "${dataset}" \
       --stage "${stage}" --fusion-overlap-thresh 0.95
   )
 }

@@ -8,5 +8,5 @@ source "$(dirname "${BASH_SOURCE[0]}")/env.sh"
 
 for stage in ${STAGES}; do
   require_file "${LAOX_DATA_ROOT}/${SYN_DATASET}/${stage}/coco.json"
-  bash "${LAOX_REPO}/granularity_divide_and_conquer/run_gra_dico.sh" "${SYN_DATASET}" "${stage}"
+  bash "${LAOX_REPO}/granularity_divide_and_conquer/run.sh" "${SYN_DATASET}" "${stage}"
 done

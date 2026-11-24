@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # Class-agnostic detection evaluation of curriculum-trained UnSAMv2 checkpoints
-# (sam2/training/train_curriculum.sh) with test_det_v2.py. One job per
+# (sam2/training/train_curriculum.sh) with evaluate.py. One job per
 # (stage, granularity) pair, distributed over the GPUs in GPUS.
 #
 # Usage:
-#   [VAR=value ...] bash scripts/task_test_augmentation_restart.sh [EXPERIMENT_NAME] [TRAIN_ROOT]
+#   [VAR=value ...] bash scripts/eval_curriculum.sh [EXPERIMENT_NAME] [TRAIN_ROOT]
 #
 # Checkpoint: ${TRAIN_ROOT}/augmentation_restart_<EXPERIMENT_NAME>/<stage>/log/checkpoints/checkpoint_<CKPT_SUFFIX>.pt
 # (TRAIN_ROOT default ${LAOX_RESULTS_ROOT}/train), or an explicit SAM2_CKPT.
@@ -13,7 +13,7 @@
 # Paper evaluation on DET-COMPASS:
 #   DATASET=det_compass_xp STAGES=extreme GRAS=0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8 \
 #   MASK_THRESHOLD=0.5 CKPT_SUFFIX=48 GPUS=0,1,2,3,4,5,6,7 \
-#   bash scripts/task_test_augmentation_restart.sh crop_musc_aug_xp_fusion_bs16
+#   bash scripts/eval_curriculum.sh crop_musc_aug_xp_fusion_bs16
 # Cross-dataset: the same with DATASET=CLCXray, DvXray, HiXray, pidray or PIXray.
 #
 # Environment (defaults in brackets):
@@ -22,7 +22,7 @@
 #   START_ID [0]   END_ID [full test split of DATASET]   SAVE_EVERY [100]
 #   VAL_JSON, IMAGE_ROOT   override the annotation file / image directory
 #   SAM2_CKPT              evaluate this checkpoint instead of the experiment's
-#   MODEL_SCALE            passed to --model-scale (e.g. large); default: test_det_v2.py default
+#   MODEL_SCALE            passed to --model-scale (e.g. large); default: evaluate.py default
 #   EVAL_SEED [1]   EVAL_WANDB [0]   MODEL_SEED, TRAIN_DATA_PROFILE (provenance only)
 #   PYTHON [python]   LAOX_DATA_ROOT, LAOX_RESULTS_ROOT
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -150,7 +150,7 @@ run_eval() {
     CUBLAS_WORKSPACE_CONFIG="${CUBLAS_WORKSPACE_CONFIG:-:4096:8}" \
     PYTHONHASHSEED="${EVAL_SEED}" \
     SAM2_PROFILE="${SAM2_PROFILE}" \
-    "${PYTHON}" test_det_v2.py \
+    "${PYTHON}" evaluate.py \
       --method unsamv2 \
       --seed "${EVAL_SEED}" \
       "${wandb_args[@]}" \

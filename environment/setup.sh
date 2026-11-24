@@ -10,12 +10,12 @@ SAM2_SOURCE="${ROOT}/sam2"
 
 case "${PROFILE}" in
   standard)
-    ENV_NAME="${ENV_NAME:-UnSAMv2}"
-    YAML="${ROOT}/environment/UnSAMv2.rebuild.yml"
+    ENV_NAME="${ENV_NAME:-laox}"
+    YAML="${ROOT}/environment/laox.yml"
     ;;
   5090)
-    ENV_NAME="${ENV_NAME:-UnSAMv2_5090}"
-    YAML="${ROOT}/environment/UnSAMv2_5090.rebuild.yml"
+    ENV_NAME="${ENV_NAME:-laox_rtx5090}"
+    YAML="${ROOT}/environment/laox_rtx5090.yml"
     export TORCH_CUDA_ARCH_LIST="${TORCH_CUDA_ARCH_LIST:-12.0}"
     ;;
   *)

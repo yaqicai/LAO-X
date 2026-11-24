@@ -19,4 +19,4 @@ STAGES="${EVAL_STAGES:-extreme}" \
 GRAS="${GRAS:-0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8}" \
 MASK_THRESHOLD="${MASK_THRESHOLD:-0.5}" \
 CKPT_SUFFIX="${CKPT_SUFFIX:-48}" \
-  bash "${LAOX_REPO}/scripts/task_test_augmentation_restart.sh" "${EXPERIMENT}" "${LAOX_RESULTS_ROOT}/train"
+  bash "${LAOX_REPO}/scripts/eval_curriculum.sh" "${EXPERIMENT}" "${LAOX_RESULTS_ROOT}/train"

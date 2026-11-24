@@ -6,7 +6,7 @@ Each table counts, over DET-COMPASS (HuggingFace ``PAGF/DET-COMPASS``,
 ``default`` configuration), how often every (high, low) attenuation pair maps
 to each colour / grey / density value, and is pickled as
 ``xray_highlow_to_<table>_dict_RAW.pkl``. The generator denoises and densifies
-these counts when it loads them (``compass_editor/colour.py``).
+these counts when it loads them (``xray_ops/colour.py``).
 
     python build_luts.py all                 # colour, grey and density
     python build_luts.py colour|grey|density [--out-dir DIR] [--force]
@@ -29,7 +29,7 @@ import numpy as np
 from datasets import load_dataset
 from tqdm import tqdm
 
-from compass_editor.colour import lut_dir, quantize_color
+from xray_ops.colour import lut_dir, quantize_color
 
 
 HF_DATASET = "PAGF/DET-COMPASS"

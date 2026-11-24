@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Whole-image automatic mask generation at several granularities; one COCO json per image.
-# Usage: CHECKPOINT=... IMAGE_DIR=... bash run_coco_annotator.sh [extra coco_annotator.py args]
+# Usage: CHECKPOINT=... IMAGE_DIR=... bash predict.sh [extra predict.py args]
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -20,7 +20,7 @@ if [[ -z "${CHECKPOINT}" ]]; then
 fi
 
 CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-0}" \
-"${PYTHON}" "${SCRIPT_DIR}/coco_annotator.py" \
+"${PYTHON}" "${SCRIPT_DIR}/predict.py" \
     --image-dir "${IMAGE_DIR}" \
     --model-config configs/unsamv2_small.yaml \
     --checkpoint "${CHECKPOINT}" \

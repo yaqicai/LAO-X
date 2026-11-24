@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Collect interactive-evaluation metrics (evaluation/interactive/xray_interactive_eval.sh
-# outputs) into one xlsx per method with util_xray.export_interactive_eval_metrics.
+# Collect interactive-evaluation metrics (evaluation/interactive/eval_xray.sh
+# outputs) into one xlsx per method with xray_utils.export_interactive_eval_metrics.
 # Methods are configured in the aligned arrays below.
 # Environment: GRAS, TRAIN_ROOT [${LAOX_RESULTS_ROOT:-<repo>/results}/train],
 # LAOX_CKPT_ROOT [<repo>/checkpoints] (only the checkpoint file names are used, as tags),
@@ -76,7 +76,7 @@ OUTPUT_DIRS=(
 )
 
 if [[ "${#COMMENTS[@]}" -eq 0 ]]; then
-  echo "COMMENTS is empty. Add at least one method configuration in scripts/run_interactive_metrics_xlsx.sh" >&2
+  echo "COMMENTS is empty. Add at least one method configuration in scripts/collect_interactive_metrics.sh" >&2
   exit 1
 fi
 
@@ -147,7 +147,7 @@ for ((i=0; i<num_methods; i++)); do
   echo "[interactive_xlsx] output=${output_path}"
   for dataset in "${DATASETS[@]}"; do
     "${PYTHON:-python}" - <<PY
-from util_xray import export_interactive_eval_metrics
+from xray_utils import export_interactive_eval_metrics
 
 export_interactive_eval_metrics(
     dataset="${dataset}",

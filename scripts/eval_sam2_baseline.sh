@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Zero-shot SAM 2 baseline (ultralytics SAM "everything" mode) with test_sam2.py,
+# Zero-shot SAM 2 baseline (ultralytics SAM "everything" mode) with evaluate_sam2_baseline.py,
 # sharded over the GPUs in GPUS.
 #
-# Usage: [VAR=value ...] bash scripts/task_test_sam2.sh [COMMENT]
+# Usage: [VAR=value ...] bash scripts/eval_sam2_baseline.sh [COMMENT]
 # Environment: DATASET [det_compass_xp], GPUS [0], CONF [0.25], START_ID [0],
 # END_ID [all images], SAM2_CKPT [${LAOX_CKPT_ROOT}/sam2.1_s.pt, ultralytics
 # weights], OUTPUT_DIR [<repo>/output_eval], PYTHON [python].
@@ -87,7 +87,7 @@ run_shard() {
   local end_id="$3"
   echo "[sam2] dataset=${DATASET} gpu=${gpu} start=${start_id} end=${end_id}"
   CUDA_VISIBLE_DEVICES="${gpu}" \
-    "${PYTHON:-python}" test_sam2.py \
+    "${PYTHON:-python}" evaluate_sam2_baseline.py \
       --dataset "${DATASET}" \
       --sam2-ckpt "${SAM2_CKPT}" \
       --output-dir "${OUTPUT_DIR}" \

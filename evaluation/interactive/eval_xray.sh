@@ -100,7 +100,7 @@ run_eval() {
 
   echo "[interactive_eval] dataset=${DATASET} stage=${STAGE} gra=${gra} sam_type=${SAM_TYPE} gpu=${gpu} ckpt=${CKPT_PATH}"
   CUDA_VISIBLE_DEVICES="${gpu}" \
-  "${PYTHON}" evaluation/interactive/xray_interactive_eval.py \
+  "${PYTHON}" evaluation/interactive/eval_xray.py \
     --dataset "${DATASET}" \
     --sam2-ckpt "${CKPT_PATH}" \
     --sam-type "${SAM_TYPE}" \

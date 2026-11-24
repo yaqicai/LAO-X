@@ -2,14 +2,14 @@
 # Granularity divide-and-conquer oversegmentation (CutLER + DINOv3 + CascadePSP).
 #
 # Usage:
-#   bash run_gra_dico.sh <dataset> [stage]
+#   bash run.sh <dataset> [stage]
 #       input : $LAOX_DATA_ROOT/<dataset>[/<stage>]/xray
 #       output: $LAOX_DATA_ROOT/<dataset>[/<stage>]/anno_cutler   (one JSON per image)
-#       e.g.  GPUS=0,1,2,3 bash run_gra_dico.sh crop_aug_xp easy
+#       e.g.  GPUS=0,1,2,3 bash run.sh crop_aug_xp easy
 #
-#   bash run_gra_dico.sh --input-dir DIR --output-dir DIR
+#   bash run.sh --input-dir DIR --output-dir DIR
 #       any flat folder of images, e.g.
-#       bash run_gra_dico.sh --input-dir "$LAOX_DATA_ROOT/pixray/PIXray" \
+#       bash run.sh --input-dir "$LAOX_DATA_ROOT/pixray/PIXray" \
 #           --output-dir "$LAOX_RESULTS_ROOT/cutler/pixray/granularity_divide_and_conquer/vis"
 #
 # Environment:

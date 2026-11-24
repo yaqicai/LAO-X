@@ -18,7 +18,7 @@ MAX_IMAGES="${MAX_IMAGES:-0}"
 
 # config.py lives in the repo root; isegm is found next to the script.
 PYTHONPATH="${REPO_ROOT}${PYTHONPATH:+:${PYTHONPATH}}" \
-"${PYTHON}" evaluation/interactive/sam2_xray_one_click.py \
+"${PYTHON}" evaluation/interactive/eval_xray_one_click.py \
   --dataset "${DATASET}" \
   --sam2-ckpt "${SAM2_CKPT}" \
   --sam2-cfg "${SAM2_CFG}" \

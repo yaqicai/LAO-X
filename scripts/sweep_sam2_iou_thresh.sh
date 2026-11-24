@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Sweep SAM 2 automatic-mask-generator pred_iou_thresh on the validation splits
-# (config.XrayImgRootVal / XrayImgRootValAnno) with scripts/sweep_pred_iou_thresh_sam2.py,
+# (config.XrayImgRootVal / XrayImgRootValAnno) with scripts/sweep_sam2_iou_thresh.py,
 # splitting the thresholds over the GPUs in GPUS.
 #
-# Usage: [VAR=value ...] bash scripts/task_zero_shot_xray_val_pred_iou_sam2.sh [COMMENT]
+# Usage: [VAR=value ...] bash scripts/sweep_sam2_iou_thresh.sh [COMMENT]
 # Environment: DATASETS, GPUS [0], MAX_IMAGES [100], PRED_IOU_MIN/MAX/STEP [0.0/0.3/0.05],
 # SAM2_CKPT [${LAOX_CKPT_ROOT:-<repo>/checkpoints}/sam2.1_hiera_small.pt],
 # OUTPUT_ROOT [${LAOX_RESULTS_ROOT:-<repo>/results}/pred_iou_thresh_sam2], PYTHON [python].
@@ -111,7 +111,7 @@ for DATASET in "${DATASET_LIST[@]}"; do
     CHUNK_OUT="${OUTPUT_DIR}/chunk_${chunk_start}_${chunk_end}"
     echo "[eval] dataset=${DATASET} pred_iou=${PRED_IOU_VALUES} gpu=${gpu} log=${LOG_FILE}"
     CUDA_VISIBLE_DEVICES="${gpu}" \
-      "${PYTHON:-python}" scripts/sweep_pred_iou_thresh_sam2.py \
+      "${PYTHON:-python}" scripts/sweep_sam2_iou_thresh.py \
         --config "${CONFIG}" \
         --datasets "${DATASET}" \
         --max-images "${MAX_IMAGES}" \

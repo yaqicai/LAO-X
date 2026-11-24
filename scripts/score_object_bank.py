@@ -2,7 +2,7 @@
 
 Images are matched by file name; prediction scores default to 1.0.
 
-    python eval_coco_cutler_against_gt.py --gt_path coco_agnostic.json \
+    python score_object_bank.py --gt_path coco_agnostic.json \
         --pred_paths coco_cutler_musc.json coco_cutler_ori.json [--output_json metrics.json]
 """
 import argparse

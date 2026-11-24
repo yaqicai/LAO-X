@@ -7,7 +7,7 @@ object detection has no finite, well-defined set of true-negative windows.
 
 Paths: annotations are read from ``$LAOX_DATA_ROOT`` (default ``<repo>/datasets``);
 saved predictions from ``$LAOX_OUTPUT_EVAL`` (default ``<repo>/output_eval``,
-where ``test_det_v2.py`` writes them); SAM 3 predictions from
+where ``evaluate.py`` writes them); SAM 3 predictions from
 ``$SAM3_OUTPUT_EVAL`` (default: same as ``$LAOX_OUTPUT_EVAL``). Reports go to
 ``$LAOX_RESULTS_ROOT/analysis/`` (default ``<repo>/results``) unless
 ``--output-dir`` is given.

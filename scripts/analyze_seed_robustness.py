@@ -21,7 +21,7 @@ import numpy as np
 from pycocotools.coco import COCO
 from pycocotools.cocoeval import COCOeval
 
-from analyze_protocol_false_positives import (
+from analyze_false_positives import (
     _filter_s3_predictions,
     _load_prediction_list,
 )

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Per-image AP comparison and qualitative figures for several methods
-# (util_xray.merge_image_ap_by_suffix / visualization_select) on the
+# (xray_utils.merge_image_ap_by_suffix / visualization_select) on the
 # cross-dataset benchmarks. Methods, granularities and datasets are configured
 # in the aligned arrays below; VIS_IMAGE_IDS_MATRIX holds the images shown in
 # the paper (set it to an empty string to select images by AP instead).
@@ -197,7 +197,7 @@ for di in "${!DATASETS[@]}"; do
 
   "${PYTHON:-python}" - <<PY
 import os
-from util_xray import merge_image_ap_by_suffix, select_image_ids_by_ap_gap, visualization_select
+from xray_utils import merge_image_ap_by_suffix, select_image_ids_by_ap_gap, visualization_select
 
 ap_protocol_preset = "${AP_PROTOCOL_PRESET}".strip() or None
 ap_tag = ap_protocol_preset or "default"

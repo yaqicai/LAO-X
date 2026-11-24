@@ -5,13 +5,13 @@ Paths are resolved under ``config.Root`` (``$LAOX_DATA_ROOT``, default
 ``<repo>/datasets``) as ``<Root>/<dataset>/<stage>``. Typical use per stage::
 
     # 0) class-agnostic COCO: <stage>/coco.json -> <stage>/coco_agnostic.json
-    python pseudo_label_generate.py --to-agnostic --dataset crop_aug_xp --stage easy
+    python make_pseudo_labels.py --to-agnostic --dataset crop_aug_xp --stage easy
     # 1) per-image GT labels: <stage>/anno/*.json
-    python pseudo_label_generate.py --dataset crop_aug_xp --coco-name coco_agnostic.json --stage easy
+    python make_pseudo_labels.py --dataset crop_aug_xp --coco-name coco_agnostic.json --stage easy
     # 2) fuse GT with oversegmentation (<stage>/anno_cutler from
-    #    granularity_divide_and_conquer/run_gra_dico.sh):
+    #    granularity_divide_and_conquer/run.sh):
     #    writes <stage>/anno_cutler_clean and <stage>/anno_fusion
-    python pseudo_label_generate.py --fusion --fusion-name anno_fusion --dataset crop_aug_xp \
+    python make_pseudo_labels.py --fusion --fusion-name anno_fusion --dataset crop_aug_xp \
         --stage easy --fusion-overlap-thresh 0.95
 """
 import os
@@ -22,7 +22,7 @@ import argparse
 import numpy as np
 from tqdm import tqdm
 from pycocotools import mask as mask_utils
-from util_xray import (
+from xray_utils import (
     DEFAULT_CATEGORIES,
     DEFAULT_INFO,
     DEFAULT_LICENSES,

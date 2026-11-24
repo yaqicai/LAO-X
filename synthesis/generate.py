@@ -39,7 +39,7 @@ from PIL import Image
 from pycocotools import mask as mask_utils
 from tqdm import tqdm
 
-from compass_editor.colour import (
+from xray_ops.colour import (
     center_pad_unpad,
     combine_highlow_images,
     get_bbox_from_mask,
@@ -48,7 +48,7 @@ from compass_editor.colour import (
     highlow_to_grey,
     sample_to_highlow,
 )
-from compass_editor.dataset import set_seed, transform_xray_crops
+from xray_ops.transforms import set_seed, transform_xray_crops
 
 
 HF_DATASET = "PAGF/DET-COMPASS"

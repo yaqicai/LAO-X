@@ -1,13 +1,13 @@
 """COCO / X-ray utilities shared by LAO-X.
 
 - Pseudo-label generation: ``convert_to_class_agnostic``, ``generate_anno_per_image``
-  (used by ``pseudo_label_generate.py``).
+  (used by ``make_pseudo_labels.py``).
 - Evaluation: region protocols (``_get_protocol_preset``, ``_apply_region_protocol``),
   ``evaluate_output_eval_metrics``, ``export_interactive_eval_metrics``, per-image AP
   helpers and ``visualization_select`` (used by ``scripts/``).
 
 Class-agnostic conversion from the command line:
-``python pseudo_label_generate.py --to-agnostic <coco.json>``.
+``python make_pseudo_labels.py --to-agnostic <coco.json>``.
 """
 import os
 import cv2
@@ -1360,7 +1360,7 @@ def evaluate_output_eval_metrics(
             if not skip_fusion:
                 tag = "_".join(gras)
                 try:
-                    from gra_fusion import fuse_results
+                    from fuse_granularities import fuse_results
                 except Exception:
                     fuse_results = None
 

@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Draw ground-truth and predicted masks/boxes for saved test_det_v2.py
+# Draw ground-truth and predicted masks/boxes for saved evaluate.py
 # predictions (output_eval/<dataset>_img<start>_<end>_unsamv2_<gra><suffix>/).
 #
-# Usage: [VAR=value ...] bash scripts/run_eval_vis.sh
+# Usage: [VAR=value ...] bash scripts/visualize_predictions.sh
 #   SUFFIXES         comma-separated run suffixes [_augmentation_restart_crop_musc_aug_fusion_bs16_extreme_m0_48]
 #   DATASETS         comma-separated datasets [PIXray]
 #   GRAS             granularities used for every dataset [0.1]

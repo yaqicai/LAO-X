@@ -6,10 +6,12 @@ also with PyTorch 2.7.1 + CUDA 12.8 on RTX 5090).
 ## Option A: exact conda environment
 
 ```bash
-bash environment/rebuild_environment.sh standard   # or: 5090
+bash environment/setup.sh standard   # or: 5090
+conda activate laox                  # or: laox_rtx5090
 ```
 
-This creates the environment from `environment/*.rebuild.yml`, installs the
+This creates the conda environment from `environment/laox.yml`
+(`environment/laox_rtx5090.yml` for RTX 5090), installs the
 pinned Detectron2 fork, installs the bundled `sam2/` package in editable mode,
 clones DINOv3 at the pinned commit, and builds the MultiScaleDeformableAttention
 CUDA op.
