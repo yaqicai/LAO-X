@@ -1,5 +1,10 @@
 # LAO-X
 
+Official implementation of "Localize Any Object in X-Ray Security Scans without
+Human Annotation" (NeurIPS 2026).
+
+[Project website](https://yaqicai.github.io/LAO-X/) · [Paper](https://arxiv.org/abs/2610.07326)
+
 LAO-X learns class-agnostic object segmentation for X-ray security images
 without manual masks. It
 
